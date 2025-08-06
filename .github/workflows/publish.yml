@@ -24,8 +24,25 @@ jobs:
       - name: Build package
         run: python -m build
         
+      - name: List built files
+        run: ls -la dist/
+        
+      - name: Check PyPI token
+        run: |
+          if [ -z "${{ secrets.PYPI_API_TOKEN }}" ]; then
+            echo "❌ PYPI_API_TOKEN is not set"
+            exit 1
+          else
+            echo "✅ PYPI_API_TOKEN is set"
+            echo "Token starts with: ${PYPI_API_TOKEN:0:10}..."
+          fi
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/* 
+        run: |
+          echo "Uploading to PyPI..."
+          twine upload --verbose dist/* 
