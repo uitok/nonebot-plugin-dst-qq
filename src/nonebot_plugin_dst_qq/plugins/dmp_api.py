@@ -1,10 +1,12 @@
 import httpx
-from nonebot import on_command, on_regex
+from typing import Optional
+from arclet.alconna import Alconna, Args, Field, Option, Subcommand
+from arclet.alconna.typing import CommandMeta
+from nonebot import on_alconna
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import Bot, Message
-from nonebot.params import CommandArg, RegexGroup
+from nonebot.params import Depends
 from nonebot.permission import SUPERUSER
-from nonebot.rule import to_me
 from nonebot.typing import T_State
 
 # 导入配置
@@ -105,7 +107,7 @@ class DMPAPI:
             config = get_config()
             cluster_name = await config.get_first_cluster()
         
-        url = f"{self.base_url}/setting/player/list"
+        url = f"{self.base_url}/home/player_list"
         params = {"clusterName": cluster_name}
         
         return await self._make_request("GET", url, params=params)
@@ -115,398 +117,309 @@ class DMPAPI:
         url = f"{self.base_url}/setting/clusters"
         
         return await self._make_request("GET", url)
-    
-    async def execute_command(self, cluster_name: str, world_name: str, command: str) -> dict:
-        """执行命令"""
-        url = f"{self.base_url}/home/exec"
-        
-        # 准备请求头 - 根据curl示例调整
-        headers = {
-            "X-I18n-Lang": "zh",
-            "Authorization": self.token,
-            "Content-Type": "application/json"
-        }
-        
-        # 准备请求体
-        data = {
-            "type": "console",
-            "extraData": command,
-            "clusterName": cluster_name,
-            "worldName": world_name
-        }
-        
-        return await self._make_request("POST", url, headers=headers, json=data)
 
 
-# 创建API客户端实例
+# 创建 DMPAPI 实例
 dmp_api = DMPAPI()
 
+# 基础查询命令 - 使用 Alconna
+world_info_cmd = on_alconna(
+    Alconna(
+        "世界",
+        Args["world_name?", str] = Field("Master", description="世界名称"),
+        meta=CommandMeta(
+            description="获取世界信息",
+            usage="世界 [世界名称]",
+            example="世界 Master"
+        )
+    ),
+    aliases={"world", "worldinfo"},
+    priority=5
+)
+
+room_info_cmd = on_alconna(
+    Alconna(
+        "房间",
+        Args["world_name?", str] = Field("Master", description="世界名称"),
+        meta=CommandMeta(
+            description="获取房间信息",
+            usage="房间 [世界名称]",
+            example="房间 Master"
+        )
+    ),
+    aliases={"room", "roominfo"},
+    priority=5
+)
+
+sys_info_cmd = on_alconna(
+    Alconna(
+        "系统",
+        meta=CommandMeta(
+            description="获取系统信息",
+            usage="系统",
+            example="系统"
+        )
+    ),
+    aliases={"sys", "system"},
+    priority=5
+)
+
+player_list_cmd = on_alconna(
+    Alconna(
+        "玩家",
+        Args["world_name?", str] = Field("Master", description="世界名称"),
+        meta=CommandMeta(
+            description="获取在线玩家列表",
+            usage="玩家 [世界名称]",
+            example="玩家 Master"
+        )
+    ),
+    aliases={"players", "playerlist"},
+    priority=5
+)
+
+connection_cmd = on_alconna(
+    Alconna(
+        "直连",
+        meta=CommandMeta(
+            description="获取服务器直连信息",
+            usage="直连",
+            example="直连"
+        )
+    ),
+    aliases={"connection", "connect"},
+    priority=5
+)
+
+help_cmd = on_alconna(
+    Alconna(
+        "菜单",
+        meta=CommandMeta(
+            description="显示帮助信息",
+            usage="菜单",
+            example="菜单"
+        )
+    ),
+    aliases={"help", "帮助"},
+    priority=5
+)
+
+
 # 命令处理器
-world_info_cmd = on_command("世界", aliases={"world", "worldinfo"}, priority=5)
-room_info_cmd = on_command("房间", aliases={"room", "roominfo"}, priority=5)
-sys_info_cmd = on_command("系统", aliases={"sys", "sysinfo"}, priority=5)
-player_list_cmd = on_command("玩家", aliases={"players", "playerlist"}, priority=5)
-connection_cmd = on_command("直连", aliases={"connect", "connection"}, priority=5)
-
-
 @world_info_cmd.handle()
-async def handle_world_info(bot: Bot, event: Event, state: T_State):
-    """处理世界信息命令"""
-    message = ""
+async def handle_world_info(bot: Bot, event: Event, world_name: str = "Master"):
+    """处理世界信息查询"""
     try:
-        # 使用第一个集群
-        config = get_config()
-        cluster_name = await config.get_first_cluster()
-        result = await dmp_api.get_world_info(cluster_name)
+        result = await dmp_api.get_world_info()
         
         if result.get("code") == 200:
             data = result.get("data", {})
-            message = f"🌍 世界信息 (集群: {cluster_name}):\n"
+            worlds = data.get("worlds", [])
             
-            # 处理不同类型的响应数据
-            if isinstance(data, dict):
-                # 如果是字典类型
-                for world_name, world_data in data.items():
-                    message += f"\n📋 {world_name}:\n"
-                    if isinstance(world_data, dict):
-                        for key, value in world_data.items():
-                            # 自定义字段显示
-                            if key == "isMaster":
-                                message += f"  • 主世界: {'是' if value else '否'}\n"
-                            elif key == "stat":
-                                message += f"  • 运行状态: {'运行中' if value else '已停止'}\n"
-                            elif key == "type":
-                                message += f"  • 地图类型: {value}\n"
-                            # 跳过世界ID、世界类型和系统信息字段
-                            elif key in ["world", "id", "cpu", "mem", "memSize", "diskUsed"]:
-                                continue
-                            else:
-                                # 限制字段值长度
-                                value_str = str(value)
-                                if len(value_str) > 100:
-                                    value_str = value_str[:100] + "..."
-                                message += f"  • {key}: {value_str}\n"
-                    else:
-                        value_str = str(world_data)
-                        if len(value_str) > 100:
-                            value_str = value_str[:100] + "..."
-                        message += f"  • {value_str}\n"
-            elif isinstance(data, list):
-                # 如果是列表类型
-                for i, item in enumerate(data, 1):
-                    message += f"\n📋 世界 {i}:\n"
-                    if isinstance(item, dict):
-                        for key, value in item.items():
-                            # 自定义字段显示
-                            if key == "isMaster":
-                                message += f"  • 主世界: {'是' if value else '否'}\n"
-                            elif key == "stat":
-                                message += f"  • 运行状态: {'运行中' if value else '已停止'}\n"
-                            elif key == "type":
-                                message += f"  • 地图类型: {value}\n"
-                            # 跳过世界ID、世界类型和系统信息字段
-                            elif key in ["world", "id", "cpu", "mem", "memSize", "diskUsed"]:
-                                continue
-                            else:
-                                # 限制字段值长度
-                                value_str = str(value)
-                                if len(value_str) > 100:
-                                    value_str = value_str[:100] + "..."
-                                message += f"  • {key}: {value_str}\n"
-                    else:
-                        value_str = str(item)
-                        if len(value_str) > 100:
-                            value_str = value_str[:100] + "..."
-                        message += f"  • {value_str}\n"
+            # 查找指定世界的信息
+            target_world = None
+            for world in worlds:
+                if world.get("name") == world_name:
+                    target_world = world
+                    break
+            
+            if target_world:
+                # 格式化世界信息
+                world_info = f"""🌍 世界信息 - {world_name}
+                
+📊 基本信息：
+• 名称：{target_world.get('name', 'N/A')}
+• 状态：{target_world.get('status', 'N/A')}
+• 模式：{target_world.get('mode', 'N/A')}
+• 季节：{target_world.get('season', 'N/A')}
+• 天数：{target_world.get('days', 'N/A')}
+
+👥 玩家信息：
+• 在线玩家：{target_world.get('players', 'N/A')}
+• 最大玩家：{target_world.get('maxPlayers', 'N/A')}
+
+⏰ 运行时间：
+• 运行时长：{target_world.get('uptime', 'N/A')}
+• 最后更新：{target_world.get('lastUpdate', 'N/A')}"""
+                
+                await world_info_cmd.finish(Message(world_info))
             else:
-                # 其他类型直接显示
-                data_str = str(data)
-                if len(data_str) > 2000:
-                    data_str = data_str[:2000] + "..."
-                message += f"  {data_str}"
+                await world_info_cmd.finish(Message(f"❌ 未找到世界 '{world_name}' 的信息"))
         else:
-            message = f"❌ 获取世界信息失败: {result.get('message', '未知错误')}"
-        
+            error_msg = result.get("message", "未知错误")
+            await world_info_cmd.finish(Message(f"❌ 获取世界信息失败：{error_msg}"))
+            
     except Exception as e:
-        # 简化错误信息
-        error_msg = str(e)
-        if len(error_msg) > 200:
-            error_msg = error_msg[:200] + "..."
-        message = f"❌ 获取世界信息时发生错误: {error_msg}"
-    
-    # 确保消息长度不超过QQ限制
-    if len(message) > 4000:
-        message = message[:4000] + "\n... (消息过长，已截断)"
-    
-    # 只调用一次finish
-    await world_info_cmd.finish(Message(message))
+        await world_info_cmd.finish(Message(f"❌ 处理世界信息查询时出错：{str(e)}"))
 
 
 @room_info_cmd.handle()
-async def handle_room_info(bot: Bot, event: Event, state: T_State):
-    """处理房间信息命令"""
-    message = ""
+async def handle_room_info(bot: Bot, event: Event, world_name: str = "Master"):
+    """处理房间信息查询"""
     try:
-        # 使用第一个集群
-        config = get_config()
-        cluster_name = await config.get_first_cluster()
-        result = await dmp_api.get_room_info(cluster_name)
+        result = await dmp_api.get_room_info()
         
         if result.get("code") == 200:
             data = result.get("data", {})
-            message = f"🏠 房间信息 (集群: {cluster_name}):\n"
+            room_info = f"""🏠 房间信息
             
-            # 处理不同类型的响应数据
-            if isinstance(data, dict):
-                for key, value in data.items():
-                    # 特殊处理不同类型的字段
-                    if key == "clusterSetting" and isinstance(value, dict):
-                        # 只显示房间名称，跳过其他集群设置
-                        cluster_setting = value
-                        room_name = cluster_setting.get('name', 'Unknown')
-                        message += f"\n📋 房间名称: {room_name}\n"
-                        
-                    elif key == "seasonInfo" and isinstance(value, dict):
-                        message += f"\n🌍 季节信息:\n"
-                        season_info = value
-                        message += f"  • 周期: {season_info.get('cycles', 'Unknown')}\n"
-                        
-                        # 处理季节信息
-                        phase = season_info.get('phase', {})
-                        if isinstance(phase, dict):
-                            phase_zh = phase.get('zh', 'Unknown')
-                            message += f"  • 阶段: {phase_zh}\n"
-                        else:
-                            message += f"  • 阶段: {phase}\n"
-                        
-                        season = season_info.get('season', {})
-                        if isinstance(season, dict):
-                            season_zh = season.get('zh', 'Unknown')
-                            message += f"  • 季节: {season_zh}\n"
-                        else:
-                            message += f"  • 季节: {season}\n"
-                        
-                        message += f"  • 已过天数: {season_info.get('elapsedDays', 'Unknown')}\n"
-                        
-                        # 处理季节长度
-                        season_length = season_info.get('seasonLength', {})
-                        if isinstance(season_length, dict):
-                            message += f"  • 季节长度:\n"
-                            for season_name, days in season_length.items():
-                                season_names = {'summer': '夏季', 'autumn': '秋季', 'spring': '春季', 'winter': '冬季'}
-                                display_name = season_names.get(season_name, season_name)
-                                message += f"    - {display_name}: {days}天\n"
-                        
-                    elif key == "modsCount":
-                        message += f"\n🔧 MOD数量: {value}\n"
-                        
-                    elif key == "players":
-                        message += f"\n👥 玩家信息:\n"
-                        if value is None:
-                            message += "  • 暂无玩家信息\n"
-                        elif isinstance(value, list):
-                            if value:
-                                for player in value:
-                                    if isinstance(player, dict):
-                                        name = player.get('name', 'Unknown')
-                                        userid = player.get('userid', 'Unknown')
-                                        message += f"  • {name} (ID: {userid})\n"
-                                    else:
-                                        message += f"  • {player}\n"
-                            else:
-                                message += "  • 暂无在线玩家\n"
-                        else:
-                            message += f"  • {value}\n"
-                            
-                    else:
-                        # 其他字段的通用处理
-                        if isinstance(value, dict):
-                            message += f"\n📊 {key}:\n"
-                            for sub_key, sub_value in value.items():
-                                message += f"  • {sub_key}: {sub_value}\n"
-                        elif isinstance(value, list):
-                            message += f"\n📊 {key}:\n"
-                            for i, item in enumerate(value, 1):
-                                message += f"  • {i}. {item}\n"
-                        else:
-                            message += f"• {key}: {value}\n"
-                            
-            elif isinstance(data, list):
-                for i, item in enumerate(data, 1):
-                    message += f"• 房间 {i}: {item}\n"
-            else:
-                message += f"  {data}"
+📊 基本信息：
+• 房间名称：{data.get('roomName', 'N/A')}
+• 房间描述：{data.get('description', 'N/A')}
+• 房间模式：{data.get('mode', 'N/A')}
+• 房间状态：{data.get('status', 'N/A')}
+
+👥 玩家统计：
+• 当前玩家：{data.get('currentPlayers', 'N/A')}
+• 最大玩家：{data.get('maxPlayers', 'N/A')}
+• 在线玩家：{data.get('onlinePlayers', 'N/A')}
+
+🌍 世界信息：
+• 世界数量：{data.get('worldCount', 'N/A')}
+• 活跃世界：{data.get('activeWorlds', 'N/A')}
+
+⏰ 时间信息：
+• 运行时长：{data.get('uptime', 'N/A')}
+• 最后更新：{data.get('lastUpdate', 'N/A')}"""
+            
+            await room_info_cmd.finish(Message(room_info))
         else:
-            message = f"❌ 获取房间信息失败: {result.get('message', '未知错误')}"
-        
+            error_msg = result.get("message", "未知错误")
+            await room_info_cmd.finish(Message(f"❌ 获取房间信息失败：{error_msg}"))
+            
     except Exception as e:
-        message = f"❌ 获取房间信息时发生错误: {str(e)}"
-    
-    # 确保消息长度不超过QQ限制
-    if len(message) > 4000:
-        message = message[:4000] + "\n... (消息过长，已截断)"
-    
-    # 只调用一次finish
-    await room_info_cmd.finish(Message(message))
+        await room_info_cmd.finish(Message(f"❌ 处理房间信息查询时出错：{str(e)}"))
 
 
 @sys_info_cmd.handle()
-async def handle_sys_info(bot: Bot, event: Event, state: T_State):
-    """处理系统信息命令"""
-    message = ""
+async def handle_sys_info(bot: Bot, event: Event):
+    """处理系统信息查询"""
     try:
         result = await dmp_api.get_sys_info()
         
         if result.get("code") == 200:
             data = result.get("data", {})
-            message = "💻 系统信息:\n"
+            sys_info = f"""💻 系统信息
             
-            # 处理不同类型的响应数据
-            if isinstance(data, dict):
-                for key, value in data.items():
-                    # 限制字段值长度
-                    value_str = str(value)
-                    if len(value_str) > 100:
-                        value_str = value_str[:100] + "..."
-                    message += f"• {key}: {value_str}\n"
-            elif isinstance(data, list):
-                for i, item in enumerate(data, 1):
-                    item_str = str(item)
-                    if len(item_str) > 100:
-                        item_str = item_str[:100] + "..."
-                    message += f"• 信息 {i}: {item_str}\n"
-            else:
-                data_str = str(data)
-                if len(data_str) > 2000:
-                    data_str = data_str[:2000] + "..."
-                message += f"  {data_str}"
+🖥️ 硬件信息：
+• CPU使用率：{data.get('cpuUsage', 'N/A')}%
+• 内存使用率：{data.get('memoryUsage', 'N/A')}%
+• 内存总量：{data.get('totalMemory', 'N/A')}
+• 可用内存：{data.get('availableMemory', 'N/A')}
+
+💾 存储信息：
+• 磁盘使用率：{data.get('diskUsage', 'N/A')}%
+• 磁盘总量：{data.get('totalDisk', 'N/A')}
+• 可用磁盘：{data.get('availableDisk', 'N/A')}
+
+🌐 网络信息：
+• 网络状态：{data.get('networkStatus', 'N/A')}
+• 网络延迟：{data.get('networkLatency', 'N/A')}
+
+⏰ 运行信息：
+• 系统运行时间：{data.get('uptime', 'N/A')}
+• 最后更新：{data.get('lastUpdate', 'N/A')}"""
+            
+            await sys_info_cmd.finish(Message(sys_info))
         else:
-            message = f"❌ 获取系统信息失败: {result.get('message', '未知错误')}"
-        
+            error_msg = result.get("message", "未知错误")
+            await sys_info_cmd.finish(Message(f"❌ 获取系统信息失败：{error_msg}"))
+            
     except Exception as e:
-        message = f"❌ 获取系统信息时发生错误: {str(e)}"
-    
-    # 确保消息长度不超过QQ限制
-    if len(message) > 4000:
-        message = message[:4000] + "\n... (消息过长，已截断)"
-    
-    # 只调用一次finish
-    await sys_info_cmd.finish(Message(message))
+        await sys_info_cmd.finish(Message(f"❌ 处理系统信息查询时出错：{str(e)}"))
 
 
 @player_list_cmd.handle()
-async def handle_player_list(bot: Bot, event: Event, state: T_State):
-    """处理玩家列表命令"""
-    message = ""
+async def handle_player_list(bot: Bot, event: Event, world_name: str = "Master"):
+    """处理玩家列表查询"""
     try:
-        # 使用第一个集群
-        config = get_config()
-        cluster_name = await config.get_first_cluster()
-        result = await dmp_api.get_player_list(cluster_name)
-        
-        if result.get("code") == 200:
-            data = result.get("data", [])
-            message = f"👥 在线玩家 (集群: {cluster_name}):\n"
-            
-            if data:
-                for player in data:
-                    if isinstance(player, dict):
-                        name = player.get('name', 'Unknown')
-                        userid = player.get('userid', 'Unknown')
-                        # 限制玩家名称长度
-                        if len(name) > 50:
-                            name = name[:50] + "..."
-                        message += f"• {name} (ID: {userid})\n"
-                    else:
-                        player_str = str(player)
-                        if len(player_str) > 100:
-                            player_str = player_str[:100] + "..."
-                        message += f"• {player_str}\n"
-            else:
-                message += "暂无在线玩家"
-        else:
-            message = f"❌ 获取玩家列表失败: {result.get('message', '未知错误')}"
-        
-    except Exception as e:
-        message = f"❌ 获取玩家列表时发生错误: {str(e)}"
-    
-    # 确保消息长度不超过QQ限制
-    if len(message) > 4000:
-        message = message[:4000] + "\n... (消息过长，已截断)"
-    
-    # 只调用一次finish
-    await player_list_cmd.finish(Message(message))
-
-
-@connection_cmd.handle()
-async def handle_connection(bot: Bot, event: Event, state: T_State, args: Message = CommandArg()):
-    """处理直连命令"""
-    message = ""
-    try:
-        # 使用第一个集群，忽略用户输入的集群参数
-        config = get_config()
-        cluster_name = await config.get_first_cluster()
-        
-        # 导入高级API模块来获取直连信息
-        from .dmp_advanced import dmp_advanced
-        result = await dmp_advanced.get_connection_code(cluster_name)
+        result = await dmp_api.get_player_list()
         
         if result.get("code") == 200:
             data = result.get("data", {})
-            message = f"🔗 直连信息 (集群: {cluster_name}):\n"
+            players = data.get("players", [])
             
-            if isinstance(data, dict):
-                for key, value in data.items():
-                    # 限制字段值长度
-                    value_str = str(value)
-                    if len(value_str) > 100:
-                        value_str = value_str[:100] + "..."
-                    message += f"• {key}: {value_str}\n"
+            if players:
+                player_list = f"👥 在线玩家列表 ({len(players)}人)\n\n"
+                for i, player in enumerate(players, 1):
+                    player_list += f"{i}. {player.get('name', 'N/A')} (ID: {player.get('id', 'N/A')})\n"
+                    if player.get('world'):
+                        player_list += f"   所在世界：{player.get('world')}\n"
+                    if player.get('joinTime'):
+                        player_list += f"   加入时间：{player.get('joinTime')}\n"
+                    player_list += "\n"
             else:
-                data_str = str(data)
-                if len(data_str) > 2000:
-                    data_str = data_str[:2000] + "..."
-                message += f"  {data_str}"
+                player_list = "👥 当前没有在线玩家"
+            
+            await player_list_cmd.finish(Message(player_list))
         else:
-            message = f"❌ 获取直连信息失败: {result.get('message', '未知错误')}"
-        
+            error_msg = result.get("message", "未知错误")
+            await player_list_cmd.finish(Message(f"❌ 获取玩家列表失败：{error_msg}"))
+            
     except Exception as e:
-        message = f"❌ 获取直连信息时发生错误: {str(e)}"
-    
-    # 确保消息长度不超过QQ限制
-    if len(message) > 4000:
-        message = message[:4000] + "\n... (消息过长，已截断)"
-    
-    # 只调用一次finish
-    await connection_cmd.finish(Message(message))
+        await player_list_cmd.finish(Message(f"❌ 处理玩家列表查询时出错：{str(e)}"))
 
 
-# 帮助命令
-help_cmd = on_command("菜单", aliases={"help", "dmp", "menu"}, priority=5)
+@connection_cmd.handle()
+async def handle_connection(bot: Bot, event: Event):
+    """处理直连信息查询"""
+    try:
+        result = await dmp_api.get_clusters()
+        
+        if result.get("code") == 200:
+            clusters = result.get("data", [])
+            
+            if clusters:
+                connection_info = "🔗 服务器直连信息\n\n"
+                for cluster in clusters:
+                    cluster_name = cluster.get("clusterName", "N/A")
+                    connection_code = cluster.get("connectionCode", "N/A")
+                    connection_info += f"🌍 集群：{cluster_name}\n"
+                    connection_info += f"🔗 直连码：{connection_code}\n\n"
+            else:
+                connection_info = "❌ 未找到可用的集群信息"
+            
+            await connection_cmd.finish(Message(connection_info))
+        else:
+            error_msg = result.get("message", "未知错误")
+            await connection_cmd.finish(Message(f"❌ 获取直连信息失败：{error_msg}"))
+            
+    except Exception as e:
+        await connection_cmd.finish(Message(f"❌ 处理直连信息查询时出错：{str(e)}"))
 
 
 @help_cmd.handle()
-async def handle_help(bot: Bot, event: Event, state: T_State):
-    """处理菜单命令"""
-    help_text = """
-🤖 晨曦 饥荒管理平台机器人
+async def handle_help(bot: Bot, event: Event):
+    """处理帮助信息"""
+    help_text = """🤖 DMP 饥荒管理平台机器人
 
-📋 基础命令:
-• /世界 - 获取世界信息
+📋 基础命令：
+• /世界 [世界名] - 获取世界信息
 • /房间 - 获取房间信息  
 • /系统 - 获取系统信息
-• /玩家 - 获取在线玩家列表
+• /玩家 [世界名] - 获取在线玩家列表
 • /直连 - 获取服务器直连信息
+• /菜单 - 显示此帮助信息
 
-📋 管理命令:
+🔧 管理员命令：
 • /管理命令 - 显示管理员功能菜单
+• /查看备份 - 获取备份文件列表
+• /创建备份 - 手动创建备份
+• /执行 <世界> <命令> - 执行游戏命令
+• /回档 <天数> - 回档指定天数 (1-5天)
+• /重置世界 [世界名称] - 重置世界
+• /聊天历史 [世界名] [行数] - 获取聊天历史
+• /聊天统计 - 获取聊天历史统计信息
 
-📋 帮助命令:
-• /菜单 - 显示此菜单信息
+💬 消息互通功能：
+• /消息互通 - 开启游戏内消息与QQ消息互通
+• /关闭互通 - 关闭消息互通功能
+• /互通状态 - 查看当前互通状态
+• /最新消息 [数量] - 获取游戏内最新消息
 
-💬 聊天功能:
-• 使用 消息互通
-• 使用 关闭互通
-    """
+💡 使用提示：
+• 方括号 [] 表示可选参数
+• 尖括号 <> 表示必需参数
+• 管理员命令需要超级用户权限"""
     
     await help_cmd.finish(Message(help_text)) 

@@ -10,16 +10,16 @@ __plugin_meta__ = PluginMetadata(
     name="DMP 饥荒管理平台机器人",
     description="基于 NoneBot2 的饥荒管理平台 (DMP) QQ 机器人插件，支持游戏信息查询、命令执行和消息互通功能。",
     usage="""基础命令：
-- /世界 或 /world - 获取世界信息
-- /房间 或 /room - 获取房间信息  
-- /系统 或 /sys - 获取系统信息
-- /玩家 或 /players - 获取在线玩家列表
-- /直连 或 /connection - 获取服务器直连信息
-- /菜单 或 /help - 显示帮助信息
+- /世界 [世界名] - 获取世界信息
+- /房间 - 获取房间信息  
+- /系统 - 获取系统信息
+- /玩家 [世界名] - 获取在线玩家列表
+- /直连 - 获取服务器直连信息
+- /菜单 - 显示帮助信息
 
 管理员命令：
 - /管理命令 - 显示管理员功能菜单
-- /查看备份 或 /备份 - 获取备份文件列表
+- /查看备份 - 获取备份文件列表
 - /创建备份 - 手动创建备份
 - /执行 <世界> <命令> - 执行游戏命令
 - /回档 <天数> - 回档指定天数 (1-5天)
@@ -28,10 +28,10 @@ __plugin_meta__ = PluginMetadata(
 - /聊天统计 - 获取聊天历史统计信息
 
 消息互通功能：
-- 消息互通 或 开启互通 - 开启游戏内消息与QQ消息互通
-- 关闭互通 - 关闭消息互通功能
-- 互通状态 - 查看当前互通状态
-- 最新消息 - 获取游戏内最新消息
+- /消息互通 - 开启游戏内消息与QQ消息互通
+- /关闭互通 - 关闭消息互通功能
+- /互通状态 - 查看当前互通状态
+- /最新消息 [数量] - 获取游戏内最新消息
 
 配置说明：
 在 .env 文件中配置以下环境变量：
@@ -55,12 +55,26 @@ def get_config():
         config = get_plugin_config(Config)
     return config
 
-# 使用 require 函数加载子插件
+# 使用 require 函数加载依赖插件
 try:
+    # 加载 Alconna 插件
+    require("nonebot_plugin_alconna")
+    
     # 加载子插件模块
     dmp_api = require("nonebot_plugin_dst_qq.plugins.dmp_api")
     dmp_advanced = require("nonebot_plugin_dst_qq.plugins.dmp_advanced")
     message_exchange = require("nonebot_plugin_dst_qq.plugins.message_exchange")
+    
+    print("✅ DMP 饥荒管理平台机器人插件加载成功！")
+    print("📋 支持的命令：")
+    print("  • 基础查询：/世界、/房间、/系统、/玩家、/直连、/菜单")
+    print("  • 管理员功能：/管理命令、/查看备份、/创建备份、/执行、/回档、/重置世界")
+    print("  • 聊天管理：/聊天历史、/聊天统计")
+    print("  • 消息互通：/消息互通、/关闭互通、/互通状态、/最新消息")
+    
 except Exception as e:
-    print(f"警告: 子插件加载失败: {e}")
+    print(f"❌ 警告: 插件加载失败: {e}")
+    print("请检查依赖插件是否正确安装：")
+    print("  • nonebot_plugin_alconna")
+    print("  • nonebot-adapter-onebot")
 
