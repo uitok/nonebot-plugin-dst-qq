@@ -186,7 +186,7 @@ pytest
 
 - [NoneBot2](https://nonebot.dev/) - 优秀的机器人框架
 - [OneBot](https://onebot.dev/) - 统一的聊天机器人应用接口标准
-- [DMP](https://github.com/your-dmp-repo) - 饥荒管理平台
+- [DMP](https://github.com/miracleEverywhere/dst-management-platform-api) - 饥荒管理平台
 
 ## 📞 联系方式
 
