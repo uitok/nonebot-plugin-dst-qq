@@ -31,17 +31,31 @@
 
 ## 📦 安装
 
-### 使用 nb-cli 安装（推荐）
+### 快速安装
+
+#### 使用 nb-cli 安装（推荐）
 
 ```bash
 nb plugin install nonebot-plugin-dst-qq
 ```
 
-### 使用 pip 安装
+#### 使用 pip 安装
 
 ```bash
 pip install nonebot-plugin-dst-qq
 ```
+
+### 📖 完整安装教程
+
+如果您需要完整的部署指南，包括 DMP 饥荒管理平台、NapCatQQ 协议端和 NoneBot2 机器人的配置，请参考：
+
+**[📋 完整安装教程](INSTALLATION.md)**
+
+该教程包含：
+- 🎮 DMP 饥荒管理平台部署
+- 🤖 NapCatQQ 协议端配置  
+- 🐍 NoneBot2 机器人搭建
+- 🔧 详细配置说明和故障排除
 
 ## ⚙️ 配置
 
