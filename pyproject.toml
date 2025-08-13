@@ -70,5 +70,6 @@ adapters = [
     { name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" }
 ]
 plugins = ["nonebot_plugin_alconna"]
-plugin_dirs = ["src/nonebot_plugin_dst_qq"]
+plugin_dirs = ["src/plugins/nonebot_plugin_dst_qq"]
 builtin_plugins = []
+
