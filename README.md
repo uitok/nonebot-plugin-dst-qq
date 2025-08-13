@@ -199,159 +199,43 @@ SUPERUSERS=["你的QQ号"]
 }
 ```
 
-#### 5. 世界管理模块
+#### 5. 聊天管理模块
 
-##### 5.1 重置世界
-- **接口**: `POST /world/reset`
-- **描述**: 重置指定世界
-- **请求体**:
-```json
-{
-  "clusterName": "集群名称",
-  "worldName": "世界名称"
-}
-```
-
-##### 5.2 获取聊天历史
-- **接口**: `GET /chat/history`
-- **描述**: 获取游戏内聊天历史
-- **参数**: `clusterName` (集群名称), `worldName` (世界名称，可选), `lines` (行数，默认50)
+##### 5.1 获取聊天历史
+- **接口**: `GET /home/chat`
+- **描述**: 获取指定世界的聊天历史
+- **参数**: `clusterName` (集群名称), `worldName` (世界名称), `lines` (行数)
 - **认证**: 需要Token
 
-#### 6. 集群管理模块
-
-##### 6.1 获取可用集群
-- **接口**: `GET /setting/clusters`
-- **描述**: 获取所有可用的集群列表
+##### 5.2 获取聊天统计
+- **接口**: `GET /home/chat/stats`
+- **描述**: 获取聊天统计信息
+- **参数**: `clusterName` (集群名称)
 - **认证**: 需要Token
 
-## 📁 项目结构
+## 🔧 开发
 
-```
-src/plugins/nonebot_plugin_dst_qq/
-├── __init__.py          # 主插件文件
-├── config.py            # 配置管理
-├── database.py          # 数据库操作
-└── plugins/             # 子插件目录
-    ├── dmp_api.py       # 基础API功能
-    ├── dmp_advanced.py  # 高级管理功能
-    └── message_exchange.py # 消息互通功能
-```
+### 环境要求
 
-## 🚀 启动
+- Python >= 3.9
+- NoneBot2 >= 2.4.0
+- OneBot V11 适配器
+
+### 本地开发
 
 ```bash
-nb run
-```
+# 克隆仓库
+git clone https://github.com/uitok/nonebot-plugin-dst-qq.git
+cd nonebot-plugin-dst-qq
 
-## 📝 开发说明
+# 安装开发依赖
+pip install -e ".[dev]"
 
-### 添加新命令
-
-1. 在相应的子插件文件中定义 Alconna 命令
-2. 实现命令处理函数
-3. 在 `register_handlers()` 函数中注册命令
-
-示例：
-
-```python
-from alconna import Alconna, Args
-
-# 定义命令
-my_cmd = Alconna(
-    "我的命令",
-    Args["param", str, "默认值"],
-    help_text="命令说明"
-)
-
-# 实现处理函数
-async def handle_my_cmd(bot: Bot, event: Event):
-    # 处理逻辑
-    pass
-
-# 注册命令
-my_cmd.on(handle_my_cmd)
-```
-
-### 权限控制
-
-使用 `SUPERUSER` 权限装饰器控制管理员命令：
-
-```python
-from nonebot.permission import SUPERUSER
-
-# 只有超级用户才能使用的命令
-admin_matcher = on_alconna(admin_cmd, priority=1, permission=SUPERUSER)
-```
-
-### 智能集群选择
-
-机器人会自动获取可用集群并选择第一个：
-
-```python
-async def get_first_available_cluster(self) -> str:
-    """获取第一个可用的集群名称"""
-    clusters_result = await self.get_available_clusters()
-    if clusters_result.get("code") == 200:
-        clusters = clusters_result.get("data", [])
-        if clusters:
-            cluster_name = clusters[0].get("clusterName", "")
-            return cluster_name
-    return None
-```
-
-## 🔧 故障排除
-
-### 常见问题
-
-1. **权限不足错误**
-   - 确保你的QQ号在 `SUPERUSERS` 配置中
-   - 检查DMP Token是否有效
-
-2. **集群资源不存在**
-   - 机器人会自动选择可用集群
-   - 检查DMP服务器是否正常运行
-
-3. **命令无法匹配**
-   - 确保命令格式正确
-   - 检查Alconna命令定义
-
-### 调试模式
-
-启用调试模式查看详细日志：
-
-```env
-NONEBOT_DEBUG=true
-NONEBOT_LOG_LEVEL=DEBUG
+# 运行测试
+pytest
 ```
 
 ## 📝 更新日志
-
-### v0.2.6
-
-#### 🎉 新功能
-- ✨ 新增 Alconna 命令系统，提供更强大的命令解析能力
-- 🎨 优化命令参数处理，支持智能类型检查和转换
-- 📊 改进集群选择逻辑，自动获取可用集群
-- 🔧 增强错误处理和用户反馈
-
-#### 🐛 修复
-- 🔧 修复插件加载时的相对导入问题
-- 🛠️ 解决 `name 'config' is not defined` 错误
-- 🔧 统一配置获取方式，使用 `get_config()` 函数
-- 🛠️ 修复备份列表数据处理中的切片错误
-
-#### 🎨 优化
-- 📱 改进消息显示格式，使用emoji和分隔线提升可读性
-- 🔧 优化错误处理和类型检查
-- 📝 更新管理命令菜单，反映新的命令名称
-- 🎯 提升插件稳定性和用户体验
-
-#### 🔧 技术改进
-- 🔧 重构插件加载机制，使用 `require()` 函数
-- 🛠️ 简化相对导入逻辑，移除复杂的 `sys.path` 操作
-- 📦 更新项目结构，符合 NoneBot2 插件发布规范
-- 🔧 优化依赖注入和配置管理
 
 ### v0.2.4
 
@@ -403,7 +287,6 @@ NONEBOT_LOG_LEVEL=DEBUG
 - [NoneBot2](https://nonebot.dev/) - 优秀的机器人框架
 - [OneBot](https://onebot.dev/) - 统一的聊天机器人应用接口标准
 - [DMP](https://github.com/miracleEverywhere/dst-management-platform-api) - 饥荒管理平台
-- [Alconna](https://github.com/ArcletProject/Alconna) - 强大的命令解析器
 
 ## 📞 联系方式
 
