@@ -1,16 +1,40 @@
-# DMP 饥荒管理平台机器人
+# nonebot-plugin-dst-qq
+
+[![PyPI](https://img.shields.io/pypi/v/nonebot-plugin-dst-qq)](https://pypi.org/project/nonebot-plugin-dst-qq/)
+[![Python](https://img.shields.io/pypi/pyversions/nonebot-plugin-dst-qq)](https://pypi.org/pypi/nonebot-plugin-dst-qq/)
+[![License](https://img.shields.io/pypi/l/nonebot-plugin-dst-qq)](https://pypi.org/project/nonebot-plugin-dst-qq/)
 
 基于 NoneBot2 和 Alconna 的饥荒管理平台 (DMP) QQ 机器人插件，支持游戏信息查询、命令执行和消息互通功能。
 
-## ✨ 特性
+## ✨ 功能特性
 
-- 🚀 **Alconna 命令系统**: 使用强大的 Alconna 命令解析器，支持智能参数解析和类型检查
-- 🌍 **游戏信息查询**: 获取世界信息、房间信息、系统状态、在线玩家等
-- 🔧 **管理员功能**: 备份管理、命令执行、世界回档、重置等高级功能
-- 💬 **消息互通**: 游戏内消息与QQ消息实时互通
-- 🌐 **多集群支持**: 支持多个游戏集群的管理
-- 🎯 **中英文支持**: 支持中英文命令，方便不同用户使用
-- 🔍 **智能集群选择**: 自动获取可用集群，智能选择第一个可用集群
+### 🎮 基础功能
+- **世界信息查询** - 获取游戏世界状态、运行信息
+- **房间信息查询** - 查看房间设置、季节信息、玩家状态
+- **系统信息监控** - 监控服务器CPU、内存使用情况
+- **玩家管理** - 查看在线玩家列表和详细信息
+- **直连信息** - 获取服务器直连代码
+
+### 🔧 管理功能
+- **备份管理** - 查看和创建游戏备份文件
+- **命令执行** - 在游戏中执行控制台命令
+- **世界回档** - 支持1-5天的世界回档功能
+- **世界重置** - 重置指定世界（谨慎使用）
+- **聊天历史** - 查看游戏内聊天记录
+- **聊天统计** - 统计聊天数据和使用情况
+
+### 💬 消息互通
+- **双向通信** - QQ消息与游戏内消息双向互通
+- **实时同步** - 自动同步游戏内最新消息到QQ
+- **用户管理** - 支持多用户独立的消息互通设置
+- **消息过滤** - 智能过滤和格式化消息内容
+
+### 🚀 Alconna 特性
+- **Alconna 命令系统**: 使用强大的 Alconna 命令解析器，支持智能参数解析和类型检查
+- **智能集群选择**: 自动获取可用集群，智能选择第一个可用集群
+- **中英文支持**: 支持中英文命令，方便不同用户使用
+- **参数类型检查**: 自动类型转换和验证，智能参数解析，友好的错误提示
+- **可选参数支持**: 使用方括号 `[]` 表示可选参数，使用尖括号 `<>` 表示必需参数
 
 ## 🛠️ 安装
 
@@ -77,23 +101,6 @@ SUPERUSERS=["你的QQ号"]
 | `关闭互通` | `closeexchange` | 关闭消息互通功能 | 无 |
 | `互通状态` | `exchangestatus` | 查看当前互通状态 | 无 |
 | `最新消息 [世界] [数量]` | `latestmessages [世界] [数量]` | 获取游戏内最新消息 | 世界名称（可选）、数量（可选，默认10） |
-
-## 🔧 Alconna 特性
-
-### 参数类型检查
-- 自动类型转换和验证
-- 智能参数解析
-- 友好的错误提示
-
-### 可选参数支持
-- 使用方括号 `[]` 表示可选参数
-- 使用尖括号 `<>` 表示必需参数
-- 支持默认值设置
-
-### 命令别名
-- 中英文命令完全对应
-- 支持多种调用方式
-- 统一的参数处理
 
 ## 🌐 DMP API 接口文档
 
@@ -318,24 +325,92 @@ NONEBOT_DEBUG=true
 NONEBOT_LOG_LEVEL=DEBUG
 ```
 
+## 📝 更新日志
+
+### v0.2.6
+
+#### 🎉 新功能
+- ✨ 新增 Alconna 命令系统，提供更强大的命令解析能力
+- 🎨 优化命令参数处理，支持智能类型检查和转换
+- 📊 改进集群选择逻辑，自动获取可用集群
+- 🔧 增强错误处理和用户反馈
+
+#### 🐛 修复
+- 🔧 修复插件加载时的相对导入问题
+- 🛠️ 解决 `name 'config' is not defined` 错误
+- 🔧 统一配置获取方式，使用 `get_config()` 函数
+- 🛠️ 修复备份列表数据处理中的切片错误
+
+#### 🎨 优化
+- 📱 改进消息显示格式，使用emoji和分隔线提升可读性
+- 🔧 优化错误处理和类型检查
+- 📝 更新管理命令菜单，反映新的命令名称
+- 🎯 提升插件稳定性和用户体验
+
+#### 🔧 技术改进
+- 🔧 重构插件加载机制，使用 `require()` 函数
+- 🛠️ 简化相对导入逻辑，移除复杂的 `sys.path` 操作
+- 📦 更新项目结构，符合 NoneBot2 插件发布规范
+- 🔧 优化依赖注入和配置管理
+
+### v0.2.4
+
+#### 🎉 新功能
+- ✨ 新增 `/查看备份` 命令，替代原有的 `/备份` 命令
+- 🎨 优化备份列表显示格式，支持文件大小自动转换（KB/MB/GB）
+- 📊 添加磁盘使用率显示
+- 🔧 改进备份文件信息展示，包含创建时间、文件大小、游戏周期
+
+#### 🐛 修复
+- 🔧 修复插件加载时的相对导入问题
+- 🛠️ 解决 `name 'config' is not defined` 错误
+- 🔧 统一配置获取方式，使用 `get_config()` 函数
+- 🛠️ 修复备份列表数据处理中的切片错误
+
+#### 🎨 优化
+- 📱 改进消息显示格式，使用emoji和分隔线提升可读性
+- 🔧 优化错误处理和类型检查
+- 📝 更新管理命令菜单，反映新的命令名称
+- 🎯 提升插件稳定性和用户体验
+
+#### 🔧 技术改进
+- 🔧 重构插件加载机制，使用 `require()` 函数
+- 🛠️ 简化相对导入逻辑，移除复杂的 `sys.path` 操作
+- 📦 更新项目结构，符合 NoneBot2 插件发布规范
+- 🔧 优化依赖注入和配置管理
+
+### v0.2.3
+- 初始版本发布
+- 基础功能实现
+- 消息互通功能
+
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
-
-### 贡献指南
 
 1. Fork 本仓库
 2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+5. 打开 Pull Request
 
 ## 📄 许可证
 
-MIT License
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
 ## 🙏 致谢
 
-- [NoneBot2](https://github.com/nonebot/nonebot2) - 机器人框架
-- [Alconna](https://github.com/ArcletProject/Alconna) - 命令解析器
-- [DMP](https://github.com/your-dmp-repo) - 饥荒管理平台
+- [NoneBot2](https://nonebot.dev/) - 优秀的机器人框架
+- [OneBot](https://onebot.dev/) - 统一的聊天机器人应用接口标准
+- [DMP](https://github.com/miracleEverywhere/dst-management-platform-api) - 饥荒管理平台
+- [Alconna](https://github.com/ArcletProject/Alconna) - 强大的命令解析器
+
+## 📞 联系方式
+
+- 作者：uitok
+- 邮箱：ui_101@qq.com
+- 项目主页：[https://github.com/uitok/nonebot-plugin-dst-qq](https://github.com/uitok/nonebot-plugin-dst-qq)
+
+---
+
+如果这个项目对您有帮助，请给个 ⭐️ 支持一下！
