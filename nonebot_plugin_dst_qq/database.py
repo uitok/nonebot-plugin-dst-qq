@@ -1,16 +1,63 @@
 import aiosqlite
 import os
 import re
+import shutil
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+from pathlib import Path
+from nonebot import require
+from nonebot.log import logger
+
+# 声明插件依赖
+require("nonebot_plugin_localstore")
+
+# 导入 localstore 插件和缓存管理器
+import nonebot_plugin_localstore as store
+from .cache_manager import cached, cache_manager
+from .data_archive_manager import archive_manager
 
 
 class ChatHistoryDatabase:
     """聊天历史数据库管理器"""
     
-    def __init__(self, db_path: str = "chat_history.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: Optional[str] = None):
+        # 使用 localstore 获取插件数据目录
+        if db_path is None:
+            plugin_data_dir = store.get_plugin_data_dir()
+            self.db_path = str(plugin_data_dir / "chat_history.db")
+        else:
+            self.db_path = db_path
+        
+        # 确保数据目录存在
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # 执行数据迁移（如果需要）
+        self._migrate_old_database()
+        
         self._init_lock = False
+    
+    def _migrate_old_database(self):
+        """迁移旧的数据库文件"""
+        try:
+            old_db_path = Path("chat_history.db")
+            new_db_path = Path(self.db_path)
+            
+            # 如果旧文件存在且新文件不存在，进行迁移
+            if old_db_path.exists() and not new_db_path.exists():
+                logger.info("🔄 检测到旧数据库文件，开始迁移...")
+                shutil.move(str(old_db_path), str(new_db_path))
+                logger.info(f"✅ 数据库已成功迁移到: {new_db_path}")
+            elif old_db_path.exists() and new_db_path.exists():
+                logger.warning("⚠️ 新旧数据库文件均存在，请手动处理旧文件")
+                # 重命名旧文件为备份
+                backup_path = old_db_path.with_suffix(".db.backup")
+                if not backup_path.exists():
+                    old_db_path.rename(backup_path)
+                    logger.info(f"📦 旧数据库文件已重命名为: {backup_path}")
+                    
+        except Exception as e:
+            logger.error(f"❌ 数据库迁移失败: {e}")
+            # 迁移失败不影响插件运行，继续使用新路径
     
     async def init_database(self):
         """初始化数据库"""
@@ -19,6 +66,9 @@ class ChatHistoryDatabase:
         
         self._init_lock = True
         try:
+            # 同时初始化归档表结构
+            await archive_manager.init_archive_tables()
+            
             async with aiosqlite.connect(self.db_path) as db:
                 # 创建聊天历史表
                 await db.execute('''
@@ -180,10 +230,36 @@ class ChatHistoryDatabase:
                     added_count += 1
                 
                 await db.commit()
+                
+                # 数据更新后清除相关缓存
+                await self._invalidate_related_cache(cluster_name, world_name)
+                
                 return added_count
         except Exception as e:
             print(f"添加聊天历史失败: {e}")
             return 0
+    
+    async def _invalidate_related_cache(self, cluster_name: str, world_name: str) -> None:
+        """清除相关缓存"""
+        try:
+            # 清除聊天历史相关缓存
+            recent_history_key = cache_manager._generate_cache_key(
+                "get_recent_chat_history", self, cluster_name, world_name, 50
+            )
+            await cache_manager.delete("db", recent_history_key)
+            
+            # 清除数据库统计缓存
+            stats_key = cache_manager._generate_cache_key("get_database_stats", self)
+            await cache_manager.delete("db", stats_key)
+            
+            # 清除玩家列表缓存
+            player_list_key = cache_manager._generate_cache_key("get_player_list", self)
+            await cache_manager.delete("db", player_list_key)
+            
+            logger.debug(f"🗑️ 清除数据库缓存: {cluster_name}/{world_name}")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ 清除缓存失败: {e}")
     
     async def _update_player_info(self, db, player_name: str, player_id: Optional[str]):
         """更新玩家信息"""
@@ -211,9 +287,10 @@ class ChatHistoryDatabase:
         except Exception as e:
             print(f"更新玩家信息失败: {e}")
     
+    @cached(cache_type="db", memory_ttl=120, file_ttl=300)
     async def get_recent_chat_history(self, cluster_name: str, world_name: str, 
                                      limit: int = 50) -> List[Dict[str, Any]]:
-        """获取最近的聊天历史"""
+        """获取最近的聊天历史 - 缓存2分钟内存，5分钟文件"""
         try:
             await self.init_database()
             async with aiosqlite.connect(self.db_path) as db:
@@ -241,8 +318,9 @@ class ChatHistoryDatabase:
             print(f"获取聊天历史失败: {e}")
             return []
     
+    @cached(cache_type="db", memory_ttl=180, file_ttl=600) 
     async def get_player_chat_history(self, player_name: str, limit: int = 50) -> List[Dict[str, Any]]:
-        """获取指定玩家的聊天历史"""
+        """获取指定玩家的聊天历史 - 缓存3分钟内存，10分钟文件"""
         try:
             await self.init_database()
             async with aiosqlite.connect(self.db_path) as db:
@@ -270,8 +348,9 @@ class ChatHistoryDatabase:
             print(f"获取玩家聊天历史失败: {e}")
             return []
     
+    @cached(cache_type="db", memory_ttl=300, file_ttl=900)
     async def get_player_list(self) -> List[Dict[str, Any]]:
-        """获取玩家列表"""
+        """获取玩家列表 - 缓存5分钟内存，15分钟文件"""
         try:
             await self.init_database()
             async with aiosqlite.connect(self.db_path) as db:
@@ -295,8 +374,9 @@ class ChatHistoryDatabase:
             print(f"获取玩家列表失败: {e}")
             return []
     
+    @cached(cache_type="db", memory_ttl=60, file_ttl=300) 
     async def get_database_stats(self) -> Dict[str, Any]:
-        """获取数据库统计信息"""
+        """获取数据库统计信息 - 缓存1分钟内存，5分钟文件"""
         try:
             await self.init_database()
             async with aiosqlite.connect(self.db_path) as db:
@@ -352,6 +432,96 @@ class ChatHistoryDatabase:
             print(f"清理旧记录失败: {e}")
             return 0
     
+    async def auto_maintenance(self) -> Dict[str, Any]:
+        """执行数据库自动维护"""
+        try:
+            logger.info("🔧 开始执行数据库自动维护...")
+            
+            # 执行自动压缩
+            compress_result = await archive_manager.auto_compress_old_data()
+            
+            # 执行自动归档
+            archive_result = await archive_manager.auto_archive_old_compressed_data()
+            
+            # 清理过期归档
+            cleanup_result = await archive_manager.cleanup_old_archives()
+            
+            maintenance_summary = {
+                "success": True,
+                "compress_result": compress_result,
+                "archive_result": archive_result,
+                "cleanup_result": cleanup_result,
+                "total_records_processed": (
+                    compress_result.get('total_records_processed', 0) + 
+                    archive_result.get('total_records_processed', 0)
+                ),
+                "total_space_saved_mb": (
+                    compress_result.get('total_space_saved_mb', 0) + 
+                    cleanup_result.get('space_freed_mb', 0)
+                )
+            }
+            
+            logger.info(f"✅ 数据库维护完成，处理记录: {maintenance_summary['total_records_processed']:,} 条")
+            return maintenance_summary
+            
+        except Exception as e:
+            logger.error(f"❌ 数据库自动维护失败: {e}")
+            return {"success": False, "error": str(e)}
+    
+    async def get_data_size_analysis(self) -> Dict[str, Any]:
+        """获取数据大小分析（结合归档管理器）"""
+        try:
+            # 获取基础统计
+            db_stats = await self.get_database_stats()
+            
+            # 获取详细分析
+            archive_stats = await archive_manager.analyze_data_size()
+            
+            return {
+                **db_stats,
+                "detailed_analysis": archive_stats,
+                "recommendations": self._generate_recommendations(db_stats, archive_stats)
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ 获取数据分析失败: {e}")
+            return {}
+    
+    def _generate_recommendations(self, db_stats: Dict, archive_stats: Dict) -> List[str]:
+        """生成数据库优化建议"""
+        recommendations = []
+        
+        total_messages = db_stats.get('total_messages', 0)
+        file_size_mb = db_stats.get('file_size_mb', 0)
+        
+        # 基于记录数的建议
+        if total_messages > 100000:
+            recommendations.append("🔧 记录数较多，建议执行自动压缩")
+        elif total_messages > 500000:
+            recommendations.append("⚠️ 记录数过多，强烈建议执行数据维护")
+        
+        # 基于文件大小的建议
+        if file_size_mb > 100:
+            recommendations.append("💾 数据库文件较大，建议压缩和归档")
+        elif file_size_mb > 500:
+            recommendations.append("📦 数据库文件过大，建议立即执行维护")
+        
+        # 基于压缩机会的建议
+        compression_opportunities = archive_stats.get('compression_opportunities', {})
+        compressible = compression_opportunities.get('compressible_records', 0)
+        archivable = compression_opportunities.get('archivable_records', 0)
+        
+        if compressible > 10000:
+            recommendations.append("🗜️ 有大量数据可以压缩，建议执行自动压缩")
+        
+        if archivable > 50000:
+            recommendations.append("📁 有大量数据可以归档，建议执行自动归档")
+        
+        if not recommendations:
+            recommendations.append("✅ 数据库状态良好，暂无优化建议")
+        
+        return recommendations
+    
     async def add_qq_message(self, user_id: int, username: str, message_content: str) -> bool:
         """添加QQ消息到数据库"""
         try:
@@ -362,13 +532,38 @@ class ChatHistoryDatabase:
                     VALUES (?, ?, ?)
                 ''', (user_id, username, message_content))
                 await db.commit()
+                
+                # 清除QQ消息相关缓存
+                await self._invalidate_qq_message_cache(user_id)
+                
                 return True
         except Exception as e:
             print(f"添加QQ消息失败: {e}")
             return False
     
+    async def _invalidate_qq_message_cache(self, user_id: int) -> None:
+        """清除QQ消息相关缓存"""
+        try:
+            # 清除指定用户的消息缓存
+            user_messages_key = cache_manager._generate_cache_key(
+                "get_qq_messages", self, user_id, 50
+            )
+            await cache_manager.delete("db", user_messages_key)
+            
+            # 清除所有消息缓存
+            all_messages_key = cache_manager._generate_cache_key(
+                "get_qq_messages", self, None, 50
+            )
+            await cache_manager.delete("db", all_messages_key)
+            
+            logger.debug(f"🗑️ 清除QQ消息缓存: user_id={user_id}")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ 清除QQ消息缓存失败: {e}")
+    
+    @cached(cache_type="db", memory_ttl=90, file_ttl=300)
     async def get_qq_messages(self, user_id: int = None, limit: int = 50) -> List[Dict[str, Any]]:
-        """获取QQ消息历史"""
+        """获取QQ消息历史 - 缓存90秒内存，5分钟文件"""
         try:
             await self.init_database()
             async with aiosqlite.connect(self.db_path) as db:
@@ -407,7 +602,7 @@ class ChatHistoryDatabase:
         """同步聊天日志到数据库"""
         try:
             # 导入API模块
-            from .dmp_api import dmp_api
+            from .plugins.dmp_api import dmp_api
             
             # 获取聊天日志
             result = await dmp_api.get_chat_logs(cluster_name, world_name, lines)
