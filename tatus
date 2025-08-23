@@ -1,5 +1,0 @@
-[33mb9652b5[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mdev[m[33m, [m[1;31morigin/dev[m[33m)[m chore: 清理项目文档，删除不必要的文件
-[33m813a15b[m docs: 新增配置说明、发布指南和发布说明文档
-[33mf0b81fd[m feat: 重大重构 v0.2.6 - 简化配置系统，集成 localstore，移除默认值
-[33m53920f1[m update
-[33mc77f855[m Merge: Resolve conflicts and restructure project directory
