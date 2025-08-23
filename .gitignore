@@ -184,3 +184,45 @@ Thumbs.db
 # Test files
 test_*
 *_test.py
+
+# Configuration files with sensitive data
+app_config.json
+app_config.backup.json
+*.json.bak
+
+# Bot configuration and database files
+bot.py
+config.json
+data.json
+userdata.json
+
+# DST/DMP specific sensitive files
+klei_auth.json
+cluster_token.txt
+adminlist.txt
+whitelist.txt
+blocklist.txt
+
+# Cache and temporary data
+cache/
+logs/
+*.log
+*.cache
+
+# Environment and secrets
+.env*
+!.env.example
+!.env.template
+secrets/
+private_config/
+
+# Build artifacts and temporary files
+dist/
+build/
+*.whl
+*.tar.gz
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python

@@ -1,21 +1,107 @@
 import httpx
 from typing import Optional
-from nonebot import get_driver, get_plugin_config
+from nonebot import get_driver
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import Bot, Message
 from nonebot.permission import SUPERUSER
-from nonebot_plugin_alconna import on_alconna, Alconna, Args, Command, Option, Subcommand, Match
+from nonebot_plugin_alconna import on_alconna, Match
+from arclet.alconna import Alconna, Args, Option, Subcommand
 
-# 导入配置
+# 导入配置和缓存
 from ..config import Config
+from ..cache_manager import cached, cache_manager
+from ..base_api import BaseAPI, APIResponse
 
 # 创建DMP API实例
 dmp_api = None
 
-# 获取配置函数
-def get_config() -> Config:
-    """获取插件配置"""
-    return get_plugin_config(Config)
+# 导入新的配置管理
+from ..config import get_config
+
+async def send_long_message(bot: Bot, event: Event, title: str, content: str, max_length: int = 800):
+    """
+    发送长消息，超过指定长度时自动使用合并转发
+    
+    Args:
+        bot: Bot实例
+        event: 事件
+        title: 消息标题（用于合并转发的发送者昵称）
+        content: 消息内容
+        max_length: 最大长度阈值，超过则使用合并转发
+    """
+    try:
+        # 如果消息长度在阈值内，直接发送
+        if len(content) <= max_length:
+            await bot.send(event, content)
+            return
+        
+        # 获取机器人信息
+        bot_info = await bot.get_login_info()
+        bot_id = str(bot_info.get("user_id", "机器人"))
+        bot_name = bot_info.get("nickname", "饥荒管理机器人")
+        
+        # 分割消息内容为多个部分
+        lines = content.split('\n')
+        chunks = []
+        current_chunk = ""
+        
+        for line in lines:
+            if len(current_chunk) + len(line) + 1 > 500:  # 每个节点最大500字符
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = line
+            else:
+                current_chunk += ("\n" if current_chunk else "") + line
+        
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        # 创建合并转发节点
+        forward_nodes = []
+        for i, chunk in enumerate(chunks):
+            node_title = f"{title} - 第{i+1}部分" if len(chunks) > 1 else title
+            node = {
+                "type": "node",
+                "data": {
+                    "user_id": bot_id,
+                    "nickname": bot_name,
+                    "content": f"📋 {node_title}\n\n{chunk}"
+                }
+            }
+            forward_nodes.append(node)
+        
+        # 发送合并转发消息
+        from nonebot.adapters.onebot.v11 import MessageSegment
+        
+        if hasattr(event, 'group_id'):
+            # 群聊使用合并转发
+            try:
+                await bot.call_api(
+                    "send_group_forward_msg",
+                    group_id=event.group_id,
+                    messages=forward_nodes
+                )
+            except Exception as e:
+                print(f"⚠️ 群聊合并转发失败: {e}")
+                # 降级为普通消息
+                raise e
+        else:
+            # 私聊使用合并转发
+            try:
+                await bot.call_api(
+                    "send_private_forward_msg", 
+                    user_id=event.user_id,
+                    messages=forward_nodes
+                )
+            except Exception as e:
+                print(f"⚠️ 私聊合并转发失败: {e}")
+                # 降级为普通消息
+                raise e
+        
+    except Exception as e:
+        # 如果合并转发失败，降级为普通消息发送
+        print(f"⚠️ 合并转发失败，降级为普通消息: {e}")
+        await bot.send(event, content)
 
 # 创建Alconna命令
 world_cmd = Alconna("世界")
@@ -48,170 +134,103 @@ players_eng_matcher = on_alconna(players_cmd_eng)
 connection_eng_matcher = on_alconna(connection_cmd_eng)
 help_eng_matcher = on_alconna(help_cmd_eng)
 
-class DMPAPI:
+class DMPAPI(BaseAPI):
     """DMP API客户端"""
     
     def __init__(self):
         config = get_config()
-        self.base_url = config.dmp_base_url
-        self.token = config.dmp_token
+        super().__init__(config, "DMP-API")
         
-        # 检查token是否为空
-        if not self.token:
-            print("⚠️ 警告: DMP_TOKEN 未设置，请检查配置")
-        
-        self.headers = {
-            "Authorization": self.token,  # 直接使用token，不使用Bearer前缀
+        # 添加DMP特有的请求头
+        self._base_headers.update({
             "X-I18n-Lang": "zh"  # 使用zh而不是zh-CN
-        }
-        # 设置超时时间
-        self.timeout = 30.0
-        
-        # 缓存可用集群列表
-        self._available_clusters = None
-        self._clusters_cache_time = 0
-        self._cache_expire_time = 300  # 5分钟缓存过期
+        })
     
-    async def _make_request(self, method: str, url: str, **kwargs) -> dict:
-        """统一的请求处理方法"""
-        try:
-            # 获取自定义headers，如果没有则使用默认headers
-            custom_headers = kwargs.pop('headers', self.headers)
-            
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                if method.upper() == "GET":
-                    response = await client.get(url, headers=custom_headers, **kwargs)
-                elif method.upper() == "POST":
-                    response = await client.post(url, headers=custom_headers, **kwargs)
-                else:
-                    raise ValueError(f"不支持的HTTP方法: {method}")
-                
-                # 检查HTTP状态码
-                response.raise_for_status()
-                
-                # 尝试解析JSON响应
-                try:
-                    return response.json()
-                except:
-                    # 如果不是JSON，返回文本内容
-                    return {"code": 200, "data": response.text}
-                
-        except httpx.TimeoutException:
-            return {"code": 408, "message": "请求超时，请稍后重试"}
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 401:
-                return {"code": 401, "message": "Token认证失败，请检查token是否有效"}
-            elif e.response.status_code == 403:
-                return {"code": 403, "message": "权限不足"}
-            elif e.response.status_code == 404:
-                return {"code": 404, "message": "API接口不存在"}
-            else:
-                return {"code": e.response.status_code, "message": f"HTTP错误: {e.response.status_code}"}
-        except httpx.RequestError as e:
-            return {"code": 500, "message": f"网络请求错误: {str(e)}"}
-        except Exception as e:
-            return {"code": 500, "message": f"未知错误: {str(e)}"}
+
     
-    async def get_available_clusters(self) -> list:
-        """获取可用的集群列表"""
-        import time
-        
-        # 检查缓存是否有效
-        current_time = time.time()
-        if (self._available_clusters and 
-            current_time - self._clusters_cache_time < self._cache_expire_time):
-            return self._available_clusters
-        
+    @cached(cache_type="api", memory_ttl=300, file_ttl=600)
+    async def get_available_clusters(self) -> APIResponse:
+        """获取可用的集群列表 - 缓存5分钟内存，10分钟文件"""
         try:
-            url = f"{self.base_url}/setting/clusters"
-            result = await self._make_request("GET", url)
-            
-            if result.get("code") == 200:
-                clusters = result.get("data", [])
-                # 更新缓存
-                self._available_clusters = clusters
-                self._clusters_cache_time = current_time
-                return clusters
-            else:
-                print(f"⚠️ 获取集群列表失败: {result.get('message', '未知错误')}")
-                return []
+            response = await self.get("/setting/clusters")
+            return response
         except Exception as e:
             print(f"⚠️ 获取集群列表异常: {e}")
-            return []
+            return APIResponse(code=500, message=f"获取集群列表异常: {e}")
     
     async def get_first_available_cluster(self) -> str:
         """获取第一个可用的集群名称"""
-        clusters = await self.get_available_clusters()
-        if clusters:
-            # 返回第一个集群的名称
-            first_cluster = clusters[0]
-            if isinstance(first_cluster, dict):
-                # 根据实际API返回结构获取集群名称
-                cluster_name = first_cluster.get("clusterName")
-                if cluster_name:
-                    return cluster_name
-                # 如果没有clusterName，尝试其他可能的字段
-                return first_cluster.get("name", first_cluster.get("cluster", "cx"))
-            else:
-                return str(first_cluster)
+        response = await self.get_available_clusters()
+        if response.success and response.data:
+            clusters = response.data
+            if isinstance(clusters, list) and clusters:
+                # 返回第一个集群的名称
+                first_cluster = clusters[0]
+                if isinstance(first_cluster, dict):
+                    # 根据实际API返回结构获取集群名称
+                    cluster_name = first_cluster.get("clusterName")
+                    if cluster_name:
+                        return cluster_name
+                    # 如果没有clusterName，尝试其他可能的字段
+                    return first_cluster.get("name", first_cluster.get("cluster", "cx"))
+                else:
+                    return str(first_cluster)
         return "cx"  # 默认集群
     
-    async def get_cluster_info(self, cluster_name: str = None) -> dict:
+    async def get_cluster_info(self, cluster_name: str = None) -> APIResponse:
         """获取集群详细信息"""
         if not cluster_name:
             cluster_name = await self.get_first_available_cluster()
         
-        clusters = await self.get_available_clusters()
-        for cluster in clusters:
-            if isinstance(cluster, dict) and cluster.get("clusterName") == cluster_name:
-                return cluster
-        return {}
+        response = await self.get_available_clusters()
+        if response.success and response.data:
+            clusters = response.data
+            if isinstance(clusters, list):
+                for cluster in clusters:
+                    if isinstance(cluster, dict) and cluster.get("clusterName") == cluster_name:
+                        return APIResponse(code=200, data=cluster, message="获取集群信息成功")
+        return APIResponse(code=404, data={}, message="未找到指定集群")
     
-    async def get_world_info(self, cluster_name: str = None) -> dict:
-        """获取世界信息"""
+    @cached(cache_type="api", memory_ttl=60, file_ttl=300)
+    async def get_world_info(self, cluster_name: str = None) -> APIResponse:
+        """获取世界信息 - 缓存1分钟内存，5分钟文件"""
         if not cluster_name:
             cluster_name = await self.get_first_available_cluster()
         
-        url = f"{self.base_url}/home/world_info"
         params = {"clusterName": cluster_name}
-        
-        return await self._make_request("GET", url, params=params)
+        return await self.get("/home/world_info", params=params)
     
-    async def get_room_info(self, cluster_name: str = None) -> dict:
-        """获取房间信息"""
+    @cached(cache_type="api", memory_ttl=180, file_ttl=900) 
+    async def get_room_info(self, cluster_name: str = None) -> APIResponse:
+        """获取房间信息 - 缓存3分钟内存，15分钟文件"""
         if not cluster_name:
             cluster_name = await self.get_first_available_cluster()
         
-        url = f"{self.base_url}/home/room_info"
         params = {"clusterName": cluster_name}
-        
-        return await self._make_request("GET", url, params=params)
+        return await self.get("/home/room_info", params=params)
     
-    async def get_sys_info(self) -> dict:
-        """获取系统信息"""
-        url = f"{self.base_url}/home/sys_info"
-        
-        return await self._make_request("GET", url)
+    @cached(cache_type="api", memory_ttl=30, file_ttl=120)
+    async def get_sys_info(self) -> APIResponse:
+        """获取系统信息 - 缓存30秒内存，2分钟文件"""
+        return await self.get("/home/sys_info")
     
-    async def get_players(self, cluster_name: str = None) -> dict:
-        """获取在线玩家列表"""
+    @cached(cache_type="api", memory_ttl=30, file_ttl=180)
+    async def get_players(self, cluster_name: str = None) -> APIResponse:
+        """获取在线玩家列表 - 缓存30秒内存，3分钟文件"""
         if not cluster_name:
             cluster_name = await self.get_first_available_cluster()
         
-        url = f"{self.base_url}/setting/player/list"
         params = {"clusterName": cluster_name}
-        
-        return await self._make_request("GET", url, params=params)
+        return await self.get("/setting/player/list", params=params)
     
-    async def get_connection_info(self, cluster_name: str = None) -> dict:
-        """获取服务器直连信息"""
+    @cached(cache_type="api", memory_ttl=600, file_ttl=1800)
+    async def get_connection_info(self, cluster_name: str = None) -> APIResponse:
+        """获取服务器直连信息 - 缓存10分钟内存，30分钟文件"""
         if not cluster_name:
             cluster_name = await self.get_first_available_cluster()
         
-        url = f"{self.base_url}/external/api/connection_code"
         params = {"clusterName": cluster_name}
-        
-        return await self._make_request("GET", url, params=params)
+        return await self.get("/external/api/connection_code", params=params)
 
 # 命令处理函数
 @world_matcher.handle()
@@ -220,7 +239,7 @@ async def handle_world_cmd(bot: Bot, event: Event):
     try:
         # 先获取可用的集群
         available_clusters = await dmp_api.get_available_clusters()
-        if not available_clusters:
+        if not available_clusters.success:
             await bot.send(event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
             return
         
@@ -228,8 +247,8 @@ async def handle_world_cmd(bot: Bot, event: Event):
         cluster_name = await dmp_api.get_first_available_cluster()
         result = await dmp_api.get_world_info(cluster_name)
         
-        if result.get("code") == 200:
-            data = result.get("data")
+        if result.success:
+            data = result.data
             
             # 检查数据类型并安全处理
             if isinstance(data, dict):
@@ -266,47 +285,52 @@ async def handle_world_cmd(bot: Bot, event: Event):
                 # 根据实际API返回结构解析世界列表
                 if data:
                     # 获取集群信息以显示更多详情
-                    cluster_info = await dmp_api.get_cluster_info(cluster_name)
+                    cluster_info_result = await dmp_api.get_cluster_info(cluster_name)
+                    cluster_info = cluster_info_result.data if cluster_info_result.success else {}
                     cluster_display_name = cluster_info.get("clusterDisplayName", cluster_name)
                     cluster_status = "运行中" if cluster_info.get("status") else "已停止"
                     
-                    response = f"🌍 世界信息 (集群: {cluster_name}):\n"
-                    response += f"显示名称: {cluster_display_name}\n"
-                    response += f"集群状态: {cluster_status}\n"
-                    response += f"世界数量: {len(data)}\n\n"
+                    # 构建统一的世界信息显示
+                    status_icon = "🟢" if cluster_status == "运行中" else "🔴"
+                    
+                    world_lines = [
+                        f"🌍 世界信息",
+                        f"{status_icon} {cluster_display_name} (共 {len(data)} 个世界)",
+                        ""
+                    ]
                     
                     for i, world in enumerate(data, 1):
                         if isinstance(world, dict):
                             # 世界基本信息
                             world_name = world.get('world', '未知')
-                            world_type = world.get('type', '未知')
-                            is_master = "主世界" if world.get('isMaster') else "洞穴世界"
-                            status = "运行中" if world.get('stat') else "已停止"
+                            is_master = world.get('isMaster')
+                            status = world.get('stat')
                             
-                            response += f"🌍 世界 {i}: {world_name}\n"
-                            response += f"   类型: {world_type} ({is_master})\n"
-                            response += f"   状态: {status}\n"
+                            # 状态和类型图标
+                            world_status_icon = "🟢" if status else "🔴"
+                            world_type_icon = "🌍" if is_master else "🕳️"
+                            world_type = "主世界" if is_master else "洞穴"
                             
                             # 资源使用情况
                             cpu_usage = world.get('cpu', 0)
                             mem_usage = world.get('mem', 0)
-                            mem_size = world.get('memSize', 0)
-                            disk_used = world.get('diskUsed', 0)
                             
-                            response += f"   CPU: {cpu_usage:.1f}%\n"
-                            response += f"   内存: {mem_usage:.1f}% ({mem_size}MB)\n"
-                            response += f"   磁盘: {disk_used / (1024*1024):.1f}MB\n"
+                            # 格式化显示
+                            world_lines.append(f"{world_type_icon} {world_name} ({world_type})")
+                            world_lines.append(f"  {world_status_icon} 状态 | 💻 CPU {cpu_usage:.1f}% | 📊 内存 {mem_usage:.1f}%")
                             
                             if i < len(data):  # 不是最后一个世界
-                                response += "\n"
+                                world_lines.append("")
                         else:
-                            response += f"🌍 世界 {i}: {str(world)}\n"
+                            world_lines.append(f"🌍 世界 {i}: {str(world)}")
+                    
+                    response = "\n".join(world_lines)
                 else:
                     response = f"🌍 世界信息 (集群: {cluster_name}):\n暂无世界数据"
             else:
                 response = f"🌍 世界信息 (集群: {cluster_name}):\n数据格式异常，原始数据: {data}"
         else:
-            response = f"❌ 获取世界信息失败: {result.get('message', '未知错误')}"
+            response = f"❌ 获取世界信息失败: {result.message or '未知错误'}"
         
         await bot.send(event, response)
         
@@ -321,7 +345,7 @@ async def handle_room_cmd(bot: Bot, event: Event):
     try:
         # 先获取可用的集群
         available_clusters = await dmp_api.get_available_clusters()
-        if not available_clusters:
+        if not available_clusters.success:
             await bot.send(event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
             return
         
@@ -329,8 +353,8 @@ async def handle_room_cmd(bot: Bot, event: Event):
         cluster_name = await dmp_api.get_first_available_cluster()
         result = await dmp_api.get_room_info(cluster_name)
         
-        if result.get("code") == 200:
-            data = result.get("data")
+        if result.success:
+            data = result.data
             
             # 检查数据类型并安全处理
             if isinstance(data, dict):
@@ -339,32 +363,43 @@ async def handle_room_cmd(bot: Bot, event: Event):
                 season_info = data.get('seasonInfo', {})
                 
                 # 获取集群信息以显示更多详情
-                cluster_info = await dmp_api.get_cluster_info(cluster_name)
+                cluster_info_result = await dmp_api.get_cluster_info(cluster_name)
+                cluster_info = cluster_info_result.data if cluster_info_result.success else {}
                 cluster_display_name = cluster_info.get("clusterDisplayName", cluster_name)
                 cluster_status = "运行中" if cluster_info.get("status") else "已停止"
                 
-                response = f"🏠 房间信息 (集群: {cluster_name}):\n"
-                response += f"显示名称: {cluster_display_name}\n"
-                response += f"集群状态: {cluster_status}\n"
-                response += f"房间名: {cluster_setting.get('name', '未知')}\n"
-                response += f"密码: {cluster_setting.get('password', '无')}\n"
-                response += f"描述: {cluster_setting.get('description', '无')}\n"
-                response += f"游戏模式: {cluster_setting.get('gameMode', '未知')}\n"
-                response += f"最大玩家: {cluster_setting.get('playerNum', '未知')}\n"
-                response += f"PvP: {'开启' if cluster_setting.get('pvp') else '关闭'}\n"
-                response += f"回档天数: {cluster_setting.get('backDays', '未知')}\n"
-                response += f"投票: {'开启' if cluster_setting.get('vote') else '关闭'}\n"
-                response += f"控制台: {'启用' if cluster_setting.get('consoleEnabled') else '禁用'}\n"
-                response += f"模组数量: {data.get('modsCount', '未知')}\n"
+                # 构建简洁的房间信息
+                status_icon = "🟢" if cluster_status == "运行中" else "🔴"
                 
-                # 添加季节信息
+                room_info = [
+                    f"🏠 房间信息",
+                    f"{status_icon} {cluster_display_name} ({cluster_status})",
+                    "",
+                    f"🎮 房间名: {cluster_setting.get('name', '未知')}",
+                    f"👥 最大玩家: {cluster_setting.get('playerNum', '未知')}",
+                    f"⚔️ PvP: {'开启' if cluster_setting.get('pvp') else '关闭'}"
+                ]
+                
+                # 只在有密码时显示
+                password = cluster_setting.get('password', '')
+                if password and password != '无':
+                    room_info.append(f"🔐 密码: {password}")
+                
+                # 添加季节信息 - 简化显示
                 if season_info:
                     season = season_info.get('season', {})
                     phase = season_info.get('phase', {})
-                    response += f"当前季节: {season.get('zh', season.get('en', '未知'))}\n"
-                    response += f"当前阶段: {phase.get('zh', phase.get('en', '未知'))}\n"
-                    response += f"已过天数: {season_info.get('elapsedDays', '未知')}\n"
-                    response += f"总周期: {season_info.get('cycles', '未知')}"
+                    season_name = season.get('zh', season.get('en', '未知'))
+                    phase_name = phase.get('zh', phase.get('en', '未知'))
+                    elapsed_days = season_info.get('elapsedDays', '未知')
+                    
+                    room_info.extend([
+                        "",
+                        f"🌍 {season_name} · {phase_name}",
+                        f"📅 已过 {elapsed_days} 天"
+                    ])
+                
+                response = "\n".join(room_info)
                 
             elif isinstance(data, list):
                 # 如果data是列表，尝试获取第一个元素
@@ -380,7 +415,7 @@ async def handle_room_cmd(bot: Bot, event: Event):
             else:
                 response = f"🏠 房间信息 (集群: {cluster_name}):\n数据格式异常，原始数据: {data}"
         else:
-            response = f"❌ 获取房间信息失败: {result.get('message', '未知错误')}"
+            response = f"❌ 获取房间信息失败: {result.message or '未知错误'}"
         
         await bot.send(event, response)
         
@@ -394,8 +429,8 @@ async def handle_sys_cmd(bot: Bot, event: Event):
     """处理系统信息命令"""
     try:
         result = await dmp_api.get_sys_info()
-        if result.get("code") == 200:
-            data = result.get("data")
+        if result.success:
+            data = result.data
             
             # 检查数据类型并安全处理
             if isinstance(data, dict):
@@ -462,7 +497,7 @@ async def handle_sys_cmd(bot: Bot, event: Event):
             else:
                 response = f"💻 系统信息:\n数据格式异常，原始数据: {data}"
         else:
-            response = f"❌ 获取系统信息失败: {result.get('message', '未知错误')}"
+            response = f"❌ 获取系统信息失败: {result.message or '未知错误'}"
         
         await bot.send(event, response)
         
@@ -477,7 +512,7 @@ async def handle_players_cmd(bot: Bot, event: Event):
     try:
         # 先获取可用的集群
         available_clusters = await dmp_api.get_available_clusters()
-        if not available_clusters:
+        if not available_clusters.success:
             await bot.send(event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
             return
         
@@ -485,67 +520,76 @@ async def handle_players_cmd(bot: Bot, event: Event):
         cluster_name = await dmp_api.get_first_available_cluster()
         result = await dmp_api.get_players(cluster_name)
         
-        if result.get("code") == 200:
-            data = result.get("data")
+        if result.success:
+            data = result.data
             
             # 检查数据类型并安全处理
             if isinstance(data, dict):
-                response = f"👥 玩家信息 (集群: {cluster_name}):\n"
-                
-                # 获取集群信息以显示更多详情
-                cluster_info = await dmp_api.get_cluster_info(cluster_name)
+                # 获取集群信息
+                cluster_info_result = await dmp_api.get_cluster_info(cluster_name)
+                cluster_info = cluster_info_result.data if cluster_info_result.success else {}
                 cluster_display_name = cluster_info.get("clusterDisplayName", cluster_name)
                 cluster_status = "运行中" if cluster_info.get("status") else "已停止"
                 
-                response += f"显示名称: {cluster_display_name}\n"
-                response += f"集群状态: {cluster_status}\n\n"
+                # 构建简洁的玩家信息显示
+                status_icon = "🟢" if cluster_status == "运行中" else "🔴"
+                player_info = [
+                    f"👥 玩家信息",
+                    f"{status_icon} {cluster_display_name}",
+                    ""
+                ]
                 
                 # 在线玩家信息
                 players = data.get('players')
                 if players and isinstance(players, list) and len(players) > 0:
-                    response += f"🟢 在线玩家 ({len(players)}人):\n"
+                    player_info.append(f"🟢 在线玩家 ({len(players)}人)")
                     for i, player in enumerate(players, 1):
                         if isinstance(player, dict):
                             player_name = player.get('name', player.get('playerName', '未知'))
                             player_id = player.get('id', player.get('playerId', '未知'))
-                            response += f"  {i}. {player_name} (ID: {player_id})\n"
+                            player_info.append(f"  {i}. {player_name}")
                         else:
-                            response += f"  {i}. {str(player)}\n"
+                            player_info.append(f"  {i}. {str(player)}")
                 else:
-                    response += "😴 当前没有在线玩家\n"
+                    player_info.append("😴 当前没有在线玩家")
                 
-                # 白名单玩家信息
-                white_list = data.get('whiteList')
-                if white_list and isinstance(white_list, list) and len(white_list) > 0:
-                    response += f"\n⚪ 白名单玩家 ({len(white_list)}人):\n"
-                    for i, player in enumerate(white_list, 1):
-                        response += f"  {i}. {player}\n"
-                
-                # 管理员列表
+                # 管理员列表 - 优先显示
                 admin_list = data.get('adminList')
                 if admin_list and isinstance(admin_list, list) and len(admin_list) > 0:
-                    response += f"\n👑 管理员 ({len(admin_list)}人):\n"
+                    player_info.extend([
+                        "",
+                        f"👑 管理员 ({len(admin_list)}人)"
+                    ])
                     for i, admin in enumerate(admin_list, 1):
-                        response += f"  {i}. {admin}\n"
+                        player_info.append(f"  {i}. {admin}")
+                
+                # 白名单玩家信息 - 仅显示数量，避免过长
+                white_list = data.get('whiteList')
+                if white_list and isinstance(white_list, list) and len(white_list) > 0:
+                    player_info.extend([
+                        "",
+                        f"⚪ 白名单玩家: {len(white_list)}人"
+                    ])
                 
                 # 封禁玩家列表
                 block_list = data.get('blockList')
                 if block_list and isinstance(block_list, list) and len(block_list) > 0:
-                    response += f"\n🚫 封禁玩家 ({len(block_list)}人):\n"
+                    player_info.extend([
+                        "",
+                        f"🚫 封禁玩家 ({len(block_list)}人)"
+                    ])
                     for i, blocked in enumerate(block_list, 1):
-                        response += f"  {i}. {blocked}\n"
+                        player_info.append(f"  {i}. {blocked}")
                 
-                # UID映射信息
-                uid_map = data.get('uidMap')
-                if uid_map and isinstance(uid_map, dict) and len(uid_map) > 0:
-                    response += f"\n🆔 玩家UID映射 ({len(uid_map)}人):\n"
-                    for i, (uid, name) in enumerate(uid_map.items(), 1):
-                        response += f"  {i}. {name} (UID: {uid})\n"
+                response = "\n".join(player_info)
                 
-                # 如果没有找到任何有效信息，显示原始数据结构
-                if response == f"👥 玩家信息 (集群: {cluster_name}):\n显示名称: {cluster_display_name}\n集群状态: {cluster_status}\n\n":
-                    response += f"数据结构: {list(data.keys())}\n"
-                    response += f"原始数据: {data}"
+                # 如果只有基本信息且没有玩家数据，显示原始数据结构  
+                if len(player_info) <= 3:  # 只有标题和集群信息
+                    player_info.extend([
+                        f"数据结构: {list(data.keys())}",
+                        f"原始数据: {data}"
+                    ])
+                    response = "\n".join(player_info)
                     
             elif isinstance(data, list):
                 # 如果data是列表，直接使用
@@ -563,7 +607,7 @@ async def handle_players_cmd(bot: Bot, event: Event):
             else:
                 response = f"👥 在线玩家 (集群: {cluster_name}):\n数据格式异常，原始数据: {data}"
         else:
-            response = f"❌ 获取玩家列表失败: {result.get('message', '未知错误')}"
+            response = f"❌ 获取玩家列表失败: {result.message or '未知错误'}"
         
         await bot.send(event, response)
         
@@ -578,7 +622,7 @@ async def handle_connection_cmd(bot: Bot, event: Event):
     try:
         # 先获取可用的集群
         available_clusters = await dmp_api.get_available_clusters()
-        if not available_clusters:
+        if not available_clusters.success:
             await bot.send(event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
             return
         
@@ -586,8 +630,8 @@ async def handle_connection_cmd(bot: Bot, event: Event):
         cluster_name = await dmp_api.get_first_available_cluster()
         result = await dmp_api.get_connection_info(cluster_name)
         
-        if result.get("code") == 200:
-            data = result.get("data")
+        if result.success:
+            data = result.data
             
             # 检查数据类型并安全处理
             if isinstance(data, dict):
@@ -615,12 +659,23 @@ async def handle_connection_cmd(bot: Bot, event: Event):
                     try:
                         # 提取括号内的内容
                         content = data[10:-1]  # 去掉 "c_connect(" 和 ")"
-                        # 分割参数
-                        params = content.split("', ")
-                        if len(params) >= 3:
-                            ip = params[0].strip("'")
-                            port = params[1].strip("'")
-                            password = params[2].strip("'")
+                        
+                        # 使用正则表达式更准确地解析参数
+                        import re
+                        
+                        # 先尝试匹配三个参数: 'ip', port, 'password'
+                        pattern_3_params = r"'([^']*)',\s*(\d+),\s*'([^']*)'"
+                        match_3 = re.match(pattern_3_params, content)
+                        
+                        # 再尝试匹配两个参数: 'ip', port (无密码)
+                        pattern_2_params = r"'([^']*)',\s*(\d+)"
+                        match_2 = re.match(pattern_2_params, content)
+                        
+                        if match_3:
+                            # 三参数格式
+                            ip = match_3.group(1)
+                            port = match_3.group(2)
+                            password = match_3.group(3)
                             
                             response += f"IP地址: {ip}\n"
                             response += f"端口: {port}\n"
@@ -630,9 +685,35 @@ async def handle_connection_cmd(bot: Bot, event: Event):
                             response += f"1. 在饥荒游戏中按 ~ 键打开控制台\n"
                             response += f"2. 复制粘贴上面的直连代码\n"
                             response += f"3. 按回车键执行即可连接到服务器"
+                        elif match_2:
+                            # 两参数格式（无密码）
+                            ip = match_2.group(1)
+                            port = match_2.group(2)
+                            
+                            response += f"IP地址: {ip}\n"
+                            response += f"端口: {port}\n"
+                            response += f"密码: 无密码\n"
+                            response += f"直连代码: {data}\n\n"
+                            response += f"💡 使用方法:\n"
+                            response += f"1. 在饥荒游戏中按 ~ 键打开控制台\n"
+                            response += f"2. 复制粘贴上面的直连代码\n"
+                            response += f"3. 按回车键执行即可连接到服务器"
                         else:
-                            response += f"直连代码: {data}\n"
-                            response += f"⚠️ 无法解析直连代码格式"
+                            # 如果正则匹配失败，尝试简单的分割方式作为备用
+                            params = [p.strip(" '\"") for p in content.split(",")]
+                            if len(params) >= 3:
+                                response += f"IP地址: {params[0]}\n"
+                                response += f"端口: {params[1]}\n"
+                                response += f"密码: {params[2]}\n"
+                                response += f"直连代码: {data}\n"
+                            elif len(params) == 2:
+                                response += f"IP地址: {params[0]}\n"
+                                response += f"端口: {params[1]}\n"
+                                response += f"密码: 无密码\n"
+                                response += f"直连代码: {data}\n"
+                            else:
+                                response += f"直连代码: {data}\n"
+                                response += f"⚠️ 无法解析直连代码格式 (参数数量: {len(params)})"
                     except Exception as e:
                         response += f"直连代码: {data}\n"
                         response += f"⚠️ 解析直连代码时出错: {str(e)}"
@@ -643,7 +724,7 @@ async def handle_connection_cmd(bot: Bot, event: Event):
             else:
                 response = f"🔗 直连信息 (集群: {cluster_name}):\n数据格式异常，原始数据: {data}"
         else:
-            response = f"❌ 获取直连信息失败: {result.get('message', '未知错误')}"
+            response = f"❌ 获取直连信息失败: {result.message or '未知错误'}"
         
         await bot.send(event, response)
         
@@ -656,27 +737,27 @@ async def handle_connection_cmd(bot: Bot, event: Event):
 async def handle_help_cmd(bot: Bot, event: Event):
     """处理帮助命令"""
     try:
-        help_text = """📚 饥荒管理平台机器人帮助菜单
+        help_text = """🎮 饥荒管理平台机器人
 
-🌍 基础命令:
-• /世界 - 获取世界信息
-• /房间 - 获取房间信息  
-• /系统 - 获取系统信息
-• /玩家 - 获取在线玩家列表
-• /直连 - 获取服务器直连信息
-• /菜单 - 显示此帮助信息
+🌟 基础功能
+🌍 /世界 - 世界运行状态
+🏠 /房间 - 房间设置信息  
+💻 /系统 - 服务器状态
+👥 /玩家 - 在线玩家列表
+🔗 /直连 - 服务器直连代码
+🗂️ /集群状态 - 所有集群信息
 
-🔧 管理员命令:
-• /管理命令 - 显示管理员功能菜单
+💬 消息互通
+📱 /消息互通 - 开启QQ游戏通信
+⏹️ /关闭互通 - 停止消息互通
+📊 /互通状态 - 查看互通状态
+🔄 /切换模式 - 群聊/私聊切换
 
-💬 消息互通:
-• /消息互通 - 开启游戏内消息与QQ消息互通
-• /关闭互通 - 关闭消息互通功能
-• /互通状态 - 查看当前互通状态
+🔧 管理功能
+⚙️ /管理命令 - 管理员菜单
+🏗️ /高级功能 - 高级管理功能
 
-📝 使用说明:
-• 自动获取可用集群
-• 支持中英文命令"""
+💡 提示: 支持中英文命令，智能集群选择"""
         
         await bot.send(event, help_text)
         

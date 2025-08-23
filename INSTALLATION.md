@@ -97,35 +97,45 @@ nb create
 6. **创建虚拟环境**：选择 `no`
 7. **内置插件**：可以选择 `echo` 用于测试
 
-### 3.3 安装 nonebot-plugin-dst-qq 插件
+### 3.3 安装必要的插件
 
 ```bash
 # 进入项目目录
 cd dst-bot
 
-# 安装插件
+# 安装必要的依赖插件
+nb plugin install nonebot-plugin-localstore    # 本地存储支持
+nb plugin install nonebot-plugin-alconna       # 命令解析框架
+nb plugin install nonebot-plugin-apscheduler   # 任务调度支持
+
+# 安装主插件
 pip install nonebot-plugin-dst-qq
 ```
 
+**依赖插件说明：**
+- **nonebot-plugin-localstore**：提供本地文件存储支持，用于缓存和配置文件管理
+- **nonebot-plugin-alconna**：现代化的命令解析框架，提供更好的命令体验
+- **nonebot-plugin-apscheduler**：任务调度器，支持定时任务和异步操作
+
 ### 3.4 配置插件
 
-编辑项目根目录下的 `pyproject.toml` 文件，在 `[tool.nonebot]` 部分添加：
+使用 `nb plugin install` 命令安装的插件会自动添加到配置中。您可以检查项目根目录下的 `pyproject.toml` 文件，确认 `[tool.nonebot]` 部分包含了所有插件：
 
 ```toml
 [tool.nonebot]
-plugins = ["nonebot_plugin_dst_qq"]
+plugins = [
+    "nonebot_plugin_localstore",
+    "nonebot_plugin_alconna", 
+    "nonebot_plugin_apscheduler",
+    "nonebot_plugin_dst_qq"
+]
 ```
+
+> 💡 **提示**：如果插件没有自动添加，您可以手动将插件名称添加到 `plugins` 列表中。
 
 ### 3.5 配置环境变量
 
-将本项目的 `.env.example` 文件复制到机器人项目根目录，并重命名为 `.env`：
-
-```bash
-# 复制环境变量模板
-cp .env.example .env
-```
-
-编辑 `.env` 文件，配置以下必需的环境变量：
+编辑机器人项目根目录下的 `.env` 文件，配置以下必需的环境变量：
 
 ```env
 # NoneBot2 配置
@@ -135,20 +145,165 @@ SUPERUSERS=["你的QQ号"]
 # OneBot 适配器配置（NapCatQQ WebSocket）
 ONEBOT_WS_URLS=["ws://127.0.0.1:6700"]
 ONEBOT_ACCESS_TOKEN=你的NapCatQQ访问令牌
-
-# DMP 服务器配置（必需）
-DMP_BASE_URL=http://你的DMP服务器地址:端口/v1
-DMP_TOKEN=你的DMP_JWT令牌
-DEFAULT_CLUSTER=你的集群名称
 ```
 
-**配置说明：**
+**基础配置说明：**
 - `SUPERUSERS`：管理员的 QQ 号列表，用于执行管理员命令
 - `ONEBOT_WS_URLS`：NapCatQQ 的 WebSocket 服务器地址
 - `ONEBOT_ACCESS_TOKEN`：NapCatQQ 的访问令牌
-- `DMP_BASE_URL`：DMP 服务器的 API 地址，格式为 `http://地址:端口/v1`
-- `DMP_TOKEN`：DMP 的 JWT 认证令牌
-- `DEFAULT_CLUSTER`：默认的饥荒集群名称
+
+### 3.6 配置插件设置
+
+插件的详细配置存储在 `app_config.json` 文件中。安装插件后，该文件位于：
+
+```bash
+# 查找配置文件位置
+find ~ -name "app_config.json" -path "*/nonebot_plugin_dst_qq/*"
+```
+
+一般情况下，配置文件位于：
+- **Linux/Mac**：`~/miniconda3/lib/python3.x/site-packages/nonebot_plugin_dst_qq/app_config.json`
+- **Windows**：`%USERPROFILE%\miniconda3\Lib\site-packages\nonebot_plugin_dst_qq\app_config.json`
+
+#### 3.6.1 修改 DMP 配置
+
+找到配置文件后，编辑其中的 `dmp` 部分：
+
+```json
+{
+  "dmp": {
+    "base_url": "http://你的DMP服务器地址:端口/v1",
+    "token": "你的DMP_JWT令牌",
+    "timeout": 10.0,
+    "max_retries": 3,
+    "retry_delay": 1.0,
+    "auto_discover_clusters": true,
+    "cluster_cache_ttl": 300
+  }
+}
+```
+
+#### 3.6.2 修改机器人配置
+
+配置文件中的 `bot` 部分：
+
+```json
+{
+  "bot": {
+    "superusers": ["你的QQ号"],
+    "command_prefix": "/",
+    "enable_private_chat": true,
+    "enable_group_chat": true,
+    "admin_groups": [],
+    "allowed_groups": []
+  }
+}
+```
+
+#### 3.6.3 其他重要配置
+
+**消息互通配置**：
+```json
+{
+  "message": {
+    "enable_message_bridge": true,
+    "sync_interval": 3.0,
+    "default_target_cluster": "你的默认集群名称",
+    "default_target_world": "Master"
+  }
+}
+```
+
+**缓存配置**：
+```json
+{
+  "cache": {
+    "memory_max_size": 1000,
+    "file_cache_dir": "./cache",
+    "auto_cleanup": true
+  }
+}
+```
+
+#### 3.6.4 完整配置示例
+
+以下是一个完整的 `app_config.json` 配置示例：
+
+```json
+{
+  "version": "1.0.0",
+  "last_updated": "2024-12-30",
+  "dmp": {
+    "base_url": "http://你的DMP服务器地址:端口/v1",
+    "token": "你的DMP_JWT令牌",
+    "timeout": 10.0,
+    "max_retries": 3,
+    "retry_delay": 1.0,
+    "auto_discover_clusters": true,
+    "cluster_cache_ttl": 300
+  },
+  "bot": {
+    "superusers": ["你的QQ号"],
+    "command_prefix": "/",
+    "enable_private_chat": true,
+    "enable_group_chat": true,
+    "admin_groups": [],
+    "allowed_groups": []
+  },
+  "cache": {
+    "memory_max_size": 1000,
+    "memory_default_ttl": 300,
+    "file_cache_dir": "./cache",
+    "file_max_size": 10000,
+    "file_default_ttl": 1800,
+    "cleanup_interval": 3600,
+    "auto_cleanup": true
+  },
+  "message": {
+    "enable_message_bridge": true,
+    "sync_interval": 3.0,
+    "max_message_length": 200,
+    "default_chat_mode": "private",
+    "allow_group_chat": true,
+    "allow_private_chat": true,
+    "default_target_cluster": "你的默认集群名称",
+    "default_target_world": "Master",
+    "auto_select_world": true,
+    "filter_system_messages": true,
+    "filter_qq_messages": true,
+    "blocked_words": [],
+    "blocked_players": [],
+    "qq_to_game_template": "[QQ] {username}: {message}",
+    "game_to_qq_template": "🎮 [{cluster}] {player}: {message}",
+    "system_message_template": "📢 [{cluster}] 系统: {message}",
+    "enable_message_cache": true,
+    "cache_duration": 300,
+    "max_batch_size": 5,
+    "dedupe_window": 60,
+    "notify_connection_status": true,
+    "notify_new_users": true,
+    "show_player_join_leave": false
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "text",
+    "log_to_file": true,
+    "log_file_path": "./logs/app.log",
+    "max_file_size": 10485760,
+    "backup_count": 5
+  }
+}
+```
+
+#### 3.6.5 配置修改步骤
+
+1. **找到配置文件**：使用 `find ~ -name "app_config.json" -path "*/nonebot_plugin_dst_qq/*"` 命令
+2. **备份配置文件**：`cp app_config.json app_config.json.backup`
+3. **编辑配置文件**：使用文本编辑器修改相应配置项
+4. **验证JSON格式**：确保JSON格式正确，可以使用在线JSON验证工具
+5. **重启机器人**：配置修改后需要重启才能生效
+
+> 💡 **提示**：修改配置文件后需要重启机器人才能生效
 
 ## 🚀 第四步：运行机器人
 
@@ -225,14 +380,15 @@ nb run
 **症状**：执行命令时提示 DMP 连接错误
 **解决方案**：
 - 确认 DMP 服务器正常运行
-- 检查 `.env` 中的 `DMP_BASE_URL` 地址是否正确
-- 验证 `DMP_TOKEN` 是否有效且未过期
-- 确认 `DEFAULT_CLUSTER` 名称存在
+- 检查 `app_config.json` 中的 `dmp.base_url` 地址是否正确
+- 验证 `dmp.token` 是否有效且未过期
+- 确认 `message.default_target_cluster` 名称存在
 
 #### 4. 权限不足
 **症状**：无法执行管理员命令
 **解决方案**：
-- 确认您的 QQ 号在 `SUPERUSERS` 列表中
+- 确认您的 QQ 号在 `.env` 的 `SUPERUSERS` 列表中
+- 同时检查 `app_config.json` 中的 `bot.superusers` 配置
 - 检查 DMP 中的用户权限配置
 - 确认 JWT 令牌有足够的权限
 
@@ -249,6 +405,24 @@ nb run
 2. **查看详细日志**：观察控制台输出的错误信息
 3. **测试连接**：使用 `curl` 或浏览器测试 DMP API 连接
 4. **检查网络**：确认各服务之间的网络连通性
+5. **验证配置文件**：检查 `app_config.json` 的JSON格式是否正确
+6. **查看插件日志**：检查 `app_config.json` 中 `logging.log_file_path` 指定的日志文件
+
+### 配置文件检查清单
+
+在启动机器人前，请确认以下配置项已正确设置：
+
+#### .env 文件检查
+- [ ] `SUPERUSERS` 包含您的QQ号
+- [ ] `ONEBOT_WS_URLS` 地址正确
+- [ ] `ONEBOT_ACCESS_TOKEN` 与NapCatQQ一致
+
+#### app_config.json 文件检查
+- [ ] `dmp.base_url` 指向正确的DMP服务器
+- [ ] `dmp.token` 是有效的JWT令牌
+- [ ] `bot.superusers` 包含您的QQ号
+- [ ] `message.default_target_cluster` 是存在的集群名称
+- [ ] JSON格式正确，无语法错误
 
 ## 📞 获取帮助
 
