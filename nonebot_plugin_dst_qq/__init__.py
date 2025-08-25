@@ -3,6 +3,8 @@ from nonebot import require
 
 # 声明插件依赖
 require("nonebot_plugin_localstore")
+require("nonebot_plugin_alconna")
+require("nonebot_plugin_waiter")
 
 import nonebot
 from nonebot.plugin import PluginMetadata
