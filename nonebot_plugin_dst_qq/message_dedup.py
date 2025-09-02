@@ -120,12 +120,17 @@ _user_image_modes = set()
 def set_user_image_mode(user_id: str, enabled: bool):
     """设置用户图片模式"""
     global _user_image_modes
+    print(f"🔧 设置用户 {user_id} 图片模式: {enabled}")
+    print(f"🔧 设置前图片模式用户列表: {_user_image_modes}")
+    
     if enabled:
         _user_image_modes.add(user_id)
         print(f"✅ 用户 {user_id} 启用图片模式")
     else:
         _user_image_modes.discard(user_id)
         print(f"✅ 用户 {user_id} 禁用图片模式")
+    
+    print(f"🔧 设置后图片模式用户列表: {_user_image_modes}")
 
 async def send_with_dedup(bot, event, message):
     """
@@ -136,24 +141,59 @@ async def send_with_dedup(bot, event, message):
         event: 事件对象
         message: 消息内容
     """
-    user_id = getattr(event, 'user_id', str(getattr(event, 'get_user_id', lambda: 'unknown')()))
+    # 统一获取用户ID的方式
+    try:
+        user_id = str(event.get_user_id())
+    except:
+        user_id = str(getattr(event, 'user_id', 'unknown'))
+    
+    print(f"🔍 检查用户 {user_id} 的图片模式设置...")
     
     if _dedup_instance.should_send(user_id, str(message)):
         # 简化的图片模式检查 - 使用全局字典
         try:
             # 检查用户是否设置了图片模式
+            print(f"🔍 当前图片模式用户列表: {_user_image_modes}")
             if user_id in _user_image_modes:
                 print(f"🔍 用户 {user_id} 图片模式已激活")
                 
-                # 如果消息是纯文本，转换为图片
-                if isinstance(message, str) and not message.startswith("base64://") and not message.startswith("[CQ:image"):
+                # 检查是否需要转换为图片 - 排除已经是图片消息的情况
+                is_already_image = False
+                if hasattr(message, 'type') and message.type == 'image':
+                    is_already_image = True
+                elif isinstance(message, str) and (message.startswith("base64://") or message.startswith("[CQ:image")):
+                    is_already_image = True
+                
+                if isinstance(message, str) and not is_already_image:
                     try:
-                        from .text_to_image import convert_text_to_image
+                        from .text_to_image import convert_text_to_image_async
                         print(f"📸 转换文字为图片: {message[:50]}...")
-                        image_message = convert_text_to_image(message)
+                        image_message = await convert_text_to_image_async(message)
                         print(f"✅ 图片转换成功，发送图片消息")
-                        await bot.send(event, image_message)
-                        return
+                        try:
+                            # 创建图片消息段
+                            if isinstance(image_message, str) and image_message.startswith("base64://"):
+                                from nonebot.adapters.onebot.v11 import MessageSegment
+                                image_msg = MessageSegment.image(image_message)
+                                print(f"📤 发送MessageSegment图片消息")
+                                result = await bot.send(event, image_msg)
+                            else:
+                                print(f"📤 直接发送图片消息: {type(image_message)}")
+                                result = await bot.send(event, image_message)
+                            print(f"✅ 图片消息发送成功: {result}")
+                            return
+                        except Exception as send_error:
+                            print(f"❌ 图片消息发送失败: {send_error}")
+                            print(f"🔍 图片消息类型: {type(image_message)}")
+                            print(f"🔍 图片消息内容前缀: {str(image_message)[:100]}...")
+                            # 尝试发送原文本作为备选方案
+                            print(f"🔄 尝试发送原文本...")
+                            try:
+                                result = await bot.send(event, message)
+                                print(f"✅ 原文本发送成功: {result}")
+                            except Exception as text_error:
+                                print(f"❌ 原文本发送也失败: {text_error}")
+                            return
                     except Exception as e:
                         print(f"⚠️ 文字转图片失败，使用原文本发送: {e}")
                         await bot.send(event, message)
@@ -162,7 +202,12 @@ async def send_with_dedup(bot, event, message):
                 print(f"🔍 用户 {user_id} 文字模式")
             
             # 文字模式或转换失败，直接发送
-            await bot.send(event, message)
+            try:
+                result = await bot.send(event, message)
+                print(f"✅ 文字消息发送成功: {result}")
+            except Exception as send_error:
+                print(f"❌ 文字消息发送失败: {send_error}")
+                raise
             
         except Exception as e:
             print(f"⚠️ 处理输出模式时出错: {e}")

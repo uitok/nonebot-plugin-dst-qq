@@ -1,148 +1,174 @@
 """
 文字转图片模块
-使用PIL库将文字转换为图片
+使用nonebot-plugin-htmlrender将文字转换为图片
 """
 
-import io
 import base64
-from PIL import Image, ImageDraw, ImageFont
-from typing import Optional, Tuple
-import textwrap
-import os
+from typing import Optional
 from pathlib import Path
+from nonebot import logger
 
-class TextToImage:
-    """文字转图片转换器"""
+# 延迟导入htmlrender，避免启动时的依赖问题
+_htmlrender_available = None
+
+def _check_htmlrender():
+    """检查htmlrender是否可用"""
+    global _htmlrender_available
+    if _htmlrender_available is None:
+        try:
+            from nonebot import require
+            require("nonebot_plugin_htmlrender")
+            from nonebot_plugin_htmlrender import text_to_pic
+            _htmlrender_available = True
+            logger.success("HTMLRender插件加载成功")
+        except Exception as e:
+            _htmlrender_available = False
+            logger.warning(f"HTMLRender插件不可用，将使用备用方案: {e}")
+    return _htmlrender_available
+
+async def convert_text_to_image_async(text: str) -> str:
+    """
+    异步将文字转换为图片
     
-    def __init__(
-        self,
-        font_size: int = 24,
-        font_color: str = "#000000",
-        background_color: str = "#FFFFFF",
-        padding: int = 20,
-        max_width: int = 800,
-        line_spacing: int = 8
-    ):
-        """
-        初始化文字转图片转换器
+    Args:
+        text: 要转换的文字
         
-        Args:
-            font_size: 字体大小
-            font_color: 字体颜色
-            background_color: 背景色
-            padding: 内边距
-            max_width: 最大宽度
-            line_spacing: 行间距
-        """
-        self.font_size = font_size
-        self.font_color = font_color
-        self.background_color = background_color
-        self.padding = padding
-        self.max_width = max_width
-        self.line_spacing = line_spacing
-        
-        # 尝试加载字体
-        self.font = self._load_font()
+    Returns:
+        base64格式的图片数据字符串或原文本
+    """
+    if not text.strip():
+        text = "空消息"
     
-    def _load_font(self) -> ImageFont.FreeTypeFont:
-        """加载字体文件"""
-        # 常见的中文字体路径
+    # 检查htmlrender是否可用
+    if _check_htmlrender():
+        try:
+            from nonebot_plugin_htmlrender import text_to_pic
+            
+            # 使用htmlrender生成图片 - 使用最简参数
+            try:
+                pic_bytes = await text_to_pic(text=text)
+            except Exception as e:
+                logger.error(f"text_to_pic调用失败: {e}")
+                # 尝试使用更多参数
+                pic_bytes = await text_to_pic(
+                    text,
+                    width=700
+                )
+            
+            # 转换为base64
+            img_base64 = base64.b64encode(pic_bytes).decode()
+            logger.debug(f"HTMLRender生成图片大小: {len(pic_bytes)} bytes, base64长度: {len(img_base64)}")
+            
+            # OneBot支持的图片格式 - 返回base64字符串让外层处理
+            return f"base64://{img_base64}"
+            
+        except Exception as e:
+            logger.error(f"HTMLRender生成图片失败，使用备用方案: {e}")
+            return await _fallback_text_to_image(text)
+    else:
+        return await _fallback_text_to_image(text)
+
+async def _fallback_text_to_image(text: str) -> str:
+    """
+    备用的PIL图片生成方案
+    
+    Args:
+        text: 要转换的文字
+        
+    Returns:
+        base64格式的图片数据字符串或原文本
+    """
+    try:
+        import io
+        import textwrap
+        import os
+        from PIL import Image, ImageDraw, ImageFont
+        
+        if not text.strip():
+            text = "空消息"
+        
+        # 字体设置
+        font_size = 20
+        font_color = "#2c3e50"
+        background_color = "#f8f9fa"
+        padding = 15
+        max_width = 700
+        line_spacing = 6
+        
+        # 加载字体
         font_paths = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
             "/System/Library/Fonts/PingFang.ttc",
-            "/System/Library/Fonts/STHeiti Light.ttc",
             "C:/Windows/Fonts/msyh.ttc",
-            "C:/Windows/Fonts/simsun.ttc",
         ]
         
+        font = None
         for font_path in font_paths:
             if os.path.exists(font_path):
                 try:
-                    return ImageFont.truetype(font_path, self.font_size)
+                    font = ImageFont.truetype(font_path, font_size)
+                    break
                 except Exception:
                     continue
         
-        # 如果没有找到字体文件，使用默认字体
-        try:
-            return ImageFont.load_default(size=self.font_size)
-        except Exception:
-            return ImageFont.load_default()
-    
-    def _calculate_text_size(self, text: str) -> Tuple[int, int]:
-        """计算文本的尺寸"""
-        lines = text.split('\n')
-        max_line_width = 0
-        total_height = 0
+        if not font:
+            try:
+                font = ImageFont.load_default(size=font_size)
+            except Exception:
+                font = ImageFont.load_default()
         
-        for line in lines:
-            # 对长行进行换行处理
-            wrapped_lines = textwrap.fill(line, width=50).split('\n')
-            for wrapped_line in wrapped_lines:
-                bbox = self.font.getbbox(wrapped_line)
-                line_width = bbox[2] - bbox[0]
-                line_height = bbox[3] - bbox[1]
-                
-                max_line_width = max(max_line_width, line_width)
-                total_height += line_height + self.line_spacing
-        
-        return max_line_width, total_height
-    
-    def text_to_image(self, text: str) -> str:
-        """
-        将文字转换为base64编码的图片
-        
-        Args:
-            text: 要转换的文字
-            
-        Returns:
-            base64编码的图片数据
-        """
-        if not text.strip():
-            text = "空消息"
-        
-        # 预处理文本，进行自动换行
+        # 文本预处理
         lines = []
         for line in text.split('\n'):
             if not line.strip():
                 lines.append('')
             else:
-                # 自动换行，每50个字符换一行
                 wrapped = textwrap.fill(line, width=50)
                 lines.extend(wrapped.split('\n'))
         
         processed_text = '\n'.join(lines)
         
-        # 计算文本尺寸
-        text_width, text_height = self._calculate_text_size(processed_text)
+        # 计算尺寸
+        text_lines = processed_text.split('\n')
+        max_line_width = 0
+        total_height = 0
+        
+        for line in text_lines:
+            if hasattr(font, 'getbbox'):
+                bbox = font.getbbox(line if line.strip() else 'A')
+                line_width = bbox[2] - bbox[0]
+                line_height = bbox[3] - bbox[1]
+            else:
+                # 兼容旧版PIL
+                line_width, line_height = font.getsize(line if line.strip() else 'A')
+            
+            max_line_width = max(max_line_width, line_width)
+            total_height += line_height + line_spacing
         
         # 计算图片尺寸
-        img_width = min(text_width + 2 * self.padding, self.max_width)
-        img_height = text_height + 2 * self.padding
-        
-        # 确保最小尺寸
+        img_width = min(max_line_width + 2 * padding, max_width)
+        img_height = total_height + 2 * padding
         img_width = max(img_width, 200)
         img_height = max(img_height, 100)
         
         # 创建图片
-        image = Image.new('RGB', (img_width, img_height), self.background_color)
+        image = Image.new('RGB', (img_width, img_height), background_color)
         draw = ImageDraw.Draw(image)
         
         # 绘制文本
-        y_offset = self.padding
-        for line in processed_text.split('\n'):
+        y_offset = padding
+        for line in text_lines:
             if line.strip():
-                draw.text(
-                    (self.padding, y_offset), 
-                    line, 
-                    font=self.font, 
-                    fill=self.font_color
-                )
+                draw.text((padding, y_offset), line, font=font, fill=font_color)
             
-            # 计算行高
-            bbox = self.font.getbbox(line if line.strip() else 'A')
-            line_height = bbox[3] - bbox[1]
-            y_offset += line_height + self.line_spacing
+            if hasattr(font, 'getbbox'):
+                bbox = font.getbbox(line if line.strip() else 'A')
+                line_height = bbox[3] - bbox[1]
+            else:
+                _, line_height = font.getsize(line if line.strip() else 'A')
+            
+            y_offset += line_height + line_spacing
         
         # 转换为base64
         buffer = io.BytesIO()
@@ -150,27 +176,37 @@ class TextToImage:
         buffer.seek(0)
         
         img_base64 = base64.b64encode(buffer.getvalue()).decode()
+        logger.debug(f"PIL生成图片大小: {len(buffer.getvalue())} bytes, base64长度: {len(img_base64)}")
+        
+        # OneBot支持的图片格式 - 返回base64字符串让外层处理
         return f"base64://{img_base64}"
-
-
-# 全局实例
-_text_to_image = TextToImage(
-    font_size=20,
-    font_color="#2c3e50",
-    background_color="#f8f9fa",
-    padding=15,
-    max_width=700,
-    line_spacing=6
-)
+        
+    except Exception as e:
+        logger.error(f"备用图片生成失败: {e}")
+        # 如果PIL也失败，返回纯文本
+        return text
 
 def convert_text_to_image(text: str) -> str:
     """
-    将文字转换为图片的便捷函数
+    同步包装器，用于向后兼容
     
     Args:
         text: 要转换的文字
         
     Returns:
-        base64编码的图片数据，格式为 "base64://..."
+        base64格式的图片数据字符串或原文本
     """
-    return _text_to_image.text_to_image(text)
+    import asyncio
+    
+    try:
+        # 尝试在现有事件循环中运行
+        loop = asyncio.get_running_loop()
+        # 如果已有事件循环，创建任务
+        task = asyncio.create_task(convert_text_to_image_async(text))
+        return asyncio.run_coroutine_threadsafe(task, loop).result(timeout=10)
+    except RuntimeError:
+        # 没有运行的事件循环，创建新的
+        return asyncio.run(convert_text_to_image_async(text))
+    except Exception as e:
+        logger.error(f"图片生成失败: {e}")
+        return text

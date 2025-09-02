@@ -111,7 +111,7 @@ sys_cmd = Alconna("系统")
 players_cmd = Alconna("玩家")
 connection_cmd = Alconna("直连")
 help_cmd = Alconna("菜单")
-mode_cmd = Alconna("切换模式", Args["mode", str])
+# mode_cmd 已移至 output_mode_commands.py 中统一管理
 
 # 创建命令别名
 world_cmd_eng = Alconna("world")
@@ -128,7 +128,7 @@ sys_matcher = on_alconna(sys_cmd)
 players_matcher = on_alconna(players_cmd)
 connection_matcher = on_alconna(connection_cmd)
 help_matcher = on_alconna(help_cmd)
-mode_matcher = on_alconna(mode_cmd)
+# mode_matcher 已移至 output_mode_commands.py 中
 
 world_eng_matcher = on_alconna(world_cmd_eng)
 room_eng_matcher = on_alconna(room_cmd_eng)
@@ -759,15 +759,16 @@ async def handle_help_cmd(bot: Bot, event: Event):
 📱 /消息互通 - 开启QQ游戏通信
 ⏹️ /关闭互通 - 停止消息互通
 📊 /互通状态 - 查看互通状态
-🔄 /切换模式 - 群聊/私聊切换
 
 🔧 管理功能
 ⚙️ /管理命令 - 管理员菜单
 🏗️ /高级功能 - 高级管理功能
 
 🖼️ 输出模式
-📝 切换模式 图片 - 切换到图片输出
-📄 切换模式 文字 - 切换到文字输出  
+📝 /切换模式 文字 - 切换到文字输出
+📄 /切换模式 图片 - 切换到图片输出
+📊 /模式状态 - 查看当前模式
+🔄 /重置模式 - 重置为默认模式
 
 💡 提示: 支持中英文命令，智能集群选择"""
         
@@ -778,29 +779,7 @@ async def handle_help_cmd(bot: Bot, event: Event):
         print(f"⚠️ {error_msg}")
         await send_with_dedup(bot, event, error_msg)
 
-@mode_matcher.handle()
-async def handle_mode_cmd(bot: Bot, event: Event):
-    """处理模式切换命令"""
-    try:
-        from ..message_dedup import set_user_image_mode
-        
-        # 获取命令参数
-        mode = event.get_message().extract_plain_text().replace("切换模式", "").strip()
-        user_id = str(event.get_user_id())
-        
-        if mode in ["图片", "image", "img", "pic"]:
-            set_user_image_mode(user_id, True)
-            await send_with_dedup(bot, event, "🖼️ 输出模式已切换为图片模式\n\n现在所有消息将以图片形式发送")
-        elif mode in ["文字", "文本", "text", "txt"]:
-            set_user_image_mode(user_id, False)
-            await send_with_dedup(bot, event, "📝 输出模式已切换为文字模式\n\n现在所有消息将以文字形式发送")
-        else:
-            await send_with_dedup(bot, event, "❌ 不支持的输出模式\n\n可用模式: 图片、文字")
-            
-    except Exception as e:
-        error_msg = f"❌ 处理模式切换命令时发生错误: {str(e)}"
-        print(f"⚠️ {error_msg}")
-        await send_with_dedup(bot, event, error_msg)
+# handle_mode_cmd 已移至 output_mode_commands.py 中
 
 # 英文命令处理器
 @world_eng_matcher.handle()
