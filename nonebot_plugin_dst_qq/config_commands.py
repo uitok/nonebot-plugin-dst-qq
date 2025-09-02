@@ -12,9 +12,7 @@ from nonebot.permission import SUPERUSER
 from nonebot.rule import to_me
 
 from .config import get_config_manager, ConfigValidationError
-from .logger import get_logger, LogCategory
-
-logger = get_logger(__name__)
+from nonebot import logger
 
 # 配置查看命令
 config_status = on_command("配置状态", rule=to_me(), permission=SUPERUSER, priority=1)
@@ -72,12 +70,12 @@ async def handle_config_status(bot: Bot, event: Event):
         
         await bot.send(event, response)
         
-        logger.info("配置状态查看成功", category=LogCategory.SYSTEM, user_id=str(event.get_user_id()))
+        logger.info(f"用户 {event.get_user_id()} 查看配置状态成功")
         
     except Exception as e:
         error_msg = f"查看配置状态失败: {e}"
         await bot.send(event, error_msg)
-        logger.error("配置状态查看失败", category=LogCategory.SYSTEM, error=e)
+        logger.error(f"配置状态查看失败: {e}")
 
 @config_show.handle()
 async def handle_config_show(bot: Bot, event: Event):
@@ -113,12 +111,12 @@ async def handle_config_show(bot: Bot, event: Event):
         
         await bot.send(event, response)
         
-        logger.info("配置内容查看成功", category=LogCategory.SYSTEM, user_id=str(event.get_user_id()))
+        logger.info(f"用户 {event.get_user_id()} 查看配置内容成功")
         
     except Exception as e:
         error_msg = f"查看配置内容失败: {e}"
         await bot.send(event, error_msg)
-        logger.error("配置内容查看失败", category=LogCategory.SYSTEM, error=e)
+        logger.error(f"配置内容查看失败: {e}")
 
 @config_validate.handle()
 async def handle_config_validate(bot: Bot, event: Event):
@@ -141,14 +139,13 @@ async def handle_config_validate(bot: Bot, event: Event):
         
         await bot.send(event, response)
         
-        logger.info("配置验证完成", category=LogCategory.SYSTEM, 
-                   user_id=str(event.get_user_id()), 
-                   validation_result="通过" if not errors else "失败")
+        validation_result = "通过" if not errors else "失败"
+        logger.info(f"用户 {event.get_user_id()} 配置验证完成: {validation_result}")
         
     except Exception as e:
         error_msg = f"配置验证失败: {e}"
         await bot.send(event, error_msg)
-        logger.error("配置验证失败", category=LogCategory.SYSTEM, error=e)
+        logger.error(f"配置验证失败: {e}")
 
 @config_test.handle()
 async def handle_config_test(bot: Bot, event: Event):
@@ -173,14 +170,13 @@ async def handle_config_test(bot: Bot, event: Event):
         
         await bot.send(event, response)
         
-        logger.info("DMP连接测试完成", category=LogCategory.SYSTEM, 
-                   user_id=str(event.get_user_id()), 
-                   test_result="成功" if is_connected else "失败")
+        test_result = "成功" if is_connected else "失败"
+        logger.info(f"用户 {event.get_user_id()} DMP连接测试完成: {test_result}")
         
     except Exception as e:
         error_msg = f"连接测试失败: {e}"
         await bot.send(event, error_msg)
-        logger.error("DMP连接测试失败", category=LogCategory.SYSTEM, error=e)
+        logger.error(f"DMP连接测试失败: {e}")
 
 @config_reload.handle()
 async def handle_config_reload(bot: Bot, event: Event):
@@ -197,12 +193,12 @@ async def handle_config_reload(bot: Bot, event: Event):
         
         await bot.send(event, response)
         
-        logger.info("配置重载成功", category=LogCategory.SYSTEM, user_id=str(event.get_user_id()))
+        logger.success(f"用户 {event.get_user_id()} 配置重载成功")
         
     except Exception as e:
         error_msg = f"配置重载失败: {e}"
         await bot.send(event, error_msg)
-        logger.error("配置重载失败", category=LogCategory.SYSTEM, error=e)
+        logger.error(f"配置重载失败: {e}")
 
 @config_update.handle()
 async def handle_config_update(bot: Bot, event: Event):
@@ -232,12 +228,12 @@ async def handle_config_update(bot: Bot, event: Event):
         
         await bot.send(event, response)
         
-        logger.info("配置更新指南发送成功", category=LogCategory.SYSTEM, user_id=str(event.get_user_id()))
+        logger.info(f"用户 {event.get_user_id()} 配置更新指南发送成功")
         
     except Exception as e:
         error_msg = f"发送配置更新指南失败: {e}"
         await bot.send(event, error_msg)
-        logger.error("配置更新指南发送失败", category=LogCategory.SYSTEM, error=e)
+        logger.error(f"配置更新指南发送失败: {e}")
 
 @config_help.handle()
 async def handle_config_help(bot: Bot, event: Event):
@@ -277,11 +273,11 @@ async def handle_config_help(bot: Bot, event: Event):
         
         await bot.send(event, response)
         
-        logger.info("配置管理帮助发送成功", category=LogCategory.SYSTEM, user_id=str(event.get_user_id()))
+        logger.info(f"用户 {event.get_user_id()} 配置管理帮助发送成功")
         
     except Exception as e:
         error_msg = f"发送配置管理帮助失败: {e}"
         await bot.send(event, error_msg)
-        logger.error("配置管理帮助发送失败", category=LogCategory.SYSTEM, error=e)
+        logger.error(f"配置管理帮助发送失败: {e}")
 
 

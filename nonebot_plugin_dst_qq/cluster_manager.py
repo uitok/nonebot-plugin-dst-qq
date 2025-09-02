@@ -4,21 +4,22 @@
 """
 
 import asyncio
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
 from datetime import datetime, timedelta
 import json
 
-from .plugins.dmp_api import DMPAPI
-from .logger import get_logger
-from .cache_manager import CacheManager
+# 避免循环导入，在运行时动态导入
+if TYPE_CHECKING:
+    from .plugins.dmp_api import DMPAPI
 
-logger = get_logger(__name__)
+from nonebot import logger
+from .cache_manager import CacheManager
 
 
 class ClusterManager:
     """动态集群管理器"""
     
-    def __init__(self, dmp_api: DMPAPI, cache_manager: CacheManager):
+    def __init__(self, dmp_api: "DMPAPI", cache_manager: CacheManager):
         self.dmp_api = dmp_api
         self.cache_manager = cache_manager
         self._clusters_cache_key = "available_clusters"
@@ -143,7 +144,11 @@ class ClusterManager:
         }
         
         await self.cache_manager.set("config", self._current_cluster_key, cluster_info, memory_ttl=0, file_ttl=0)  # 永久缓存
-        logger.info(f"用户 {user_id} 设置当前集群为: {cluster_name}")
+        
+        # 清理相关缓存，让新集群立即生效
+        await self._clear_cluster_related_cache()
+        
+        logger.info(f"用户 {user_id} 设置当前集群为: {cluster_name}，已清理相关缓存")
         return True
     
     async def get_current_cluster(self) -> Optional[str]:
@@ -168,6 +173,31 @@ class ClusterManager:
         
         # 返回默认集群
         return await self.get_default_cluster()
+    
+    async def _clear_cluster_related_cache(self) -> None:
+        """清理集群相关的缓存，确保集群切换后立即生效"""
+        try:
+            # 清理API相关的缓存
+            cache_keys_to_clear = [
+                "get_world_info",
+                "get_room_info", 
+                "get_players",
+                "get_connection_info",
+                "get_backup_list",
+                "get_chat_history"
+            ]
+            
+            for cache_key in cache_keys_to_clear:
+                try:
+                    # 清理API缓存（memory和file）
+                    await self.cache_manager.delete("api", cache_key)
+                except Exception as e:
+                    logger.debug(f"清理缓存 {cache_key} 时出错: {e}")
+            
+            logger.debug("已清理集群相关缓存")
+            
+        except Exception as e:
+            logger.warning(f"清理集群相关缓存失败: {e}")
     
     async def get_cluster_info(self, cluster_name: str) -> Optional[Dict[str, Any]]:
         """获取特定集群的详细信息
@@ -245,7 +275,7 @@ class ClusterManager:
 _cluster_manager: Optional[ClusterManager] = None
 
 
-def init_cluster_manager(dmp_api: DMPAPI, cache_manager: CacheManager) -> ClusterManager:
+def init_cluster_manager(dmp_api: "DMPAPI", cache_manager: CacheManager) -> ClusterManager:
     """初始化全局集群管理器实例"""
     global _cluster_manager
     _cluster_manager = ClusterManager(dmp_api, cache_manager)

@@ -12,10 +12,7 @@ import logging
 
 # 导入配置
 from .config import Config
-from .logger import get_logger, LogCategory, log_execution_time, log_api_call
-
-# 设置结构化日志记录器
-logger = get_logger(__name__)
+from nonebot import logger
 
 class HTTPMethod(Enum):
     """HTTP请求方法枚举"""
@@ -85,11 +82,7 @@ class BaseAPI(ABC):
         if not self.base_url:
             raise ValueError(f"{self.service_name}: base_url 不能为空")
         if not self.token:
-            logger.warning(
-                "Token未设置，某些API可能无法访问",
-                category=LogCategory.SECURITY,
-                extra={"service_name": self.service_name}
-            )
+            logger.warning(f"[{self.service_name}] Token未设置，某些API可能无法访问")
     
     def _merge_headers(self, custom_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         """
@@ -187,15 +180,7 @@ class BaseAPI(ABC):
         
         message = error_messages.get(status_code, f"HTTP错误: {status_code}")
         
-        logger.error(
-            f"HTTP错误: {status_code} - {message}",
-            category=LogCategory.API,
-            extra={
-                "service_name": self.service_name,
-                "status_code": status_code,
-                "response_text": error.response.text if error.response else None
-            }
-        )
+        logger.error(f"[{self.service_name}] HTTP错误: {status_code} - {message}")
         
         return APIResponse(
             code=status_code,
@@ -222,15 +207,7 @@ class BaseAPI(ABC):
             message = f"网络请求错误: {str(error)}"
             code = 500
         
-        logger.error(
-            f"请求错误: {message}",
-            category=LogCategory.API,
-            error=error,
-            extra={
-                "service_name": self.service_name,
-                "error_type": type(error).__name__
-            }
-        )
+        logger.error(f"[{self.service_name}] 请求错误: {message} - {error}")
         
         return APIResponse(
             code=code,
@@ -280,16 +257,7 @@ class BaseAPI(ABC):
                     result = await self._handle_response(response)
                     
                     if attempt > 0:
-                        logger.info(
-                            f"重试成功 (第{attempt}次)",
-                            category=LogCategory.API,
-                            extra={
-                                "service_name": self.service_name,
-                                "attempt": attempt,
-                                "method": method.value,
-                                "url": url
-                            }
-                        )
+                        logger.info(f"[{self.service_name}] 重试成功 (第{attempt}次) - {method.value} {url}")
                     
                     return result
                     
@@ -302,44 +270,13 @@ class BaseAPI(ABC):
                 
                 if attempt < self.max_retries:
                     delay = self.retry_delay * (2 ** attempt)  # 指数退避
-                    logger.warning(
-                        f"请求失败，{delay}秒后重试 (第{attempt + 1}次/共{self.max_retries}次)",
-                        category=LogCategory.API,
-                        error=e,
-                        extra={
-                            "service_name": self.service_name,
-                            "attempt": attempt + 1,
-                            "max_retries": self.max_retries,
-                            "delay": delay,
-                            "method": method.value,
-                            "url": url
-                        }
-                    )
+                    logger.warning(f"[{self.service_name}] 请求失败，{delay}秒后重试 (第{attempt + 1}次/共{self.max_retries}次) - {e}")
                     await asyncio.sleep(delay)
                 else:
-                    logger.error(
-                        "请求失败，已达到最大重试次数",
-                        category=LogCategory.API,
-                        error=e,
-                        extra={
-                            "service_name": self.service_name,
-                            "max_retries": self.max_retries,
-                            "method": method.value,
-                            "url": url
-                        }
-                    )
+                    logger.error(f"[{self.service_name}] 请求失败，已达到最大重试次数 - {e}")
             
             except Exception as e:
-                logger.error(
-                    "未知错误",
-                    category=LogCategory.API,
-                    error=e,
-                    extra={
-                        "service_name": self.service_name,
-                        "method": method.value,
-                        "url": url
-                    }
-                )
+                logger.error(f"[{self.service_name}] 未知错误 - {e}")
                 return APIResponse(
                     code=500,
                     message=f"未知错误: {str(e)}"
@@ -403,18 +340,7 @@ class BaseAPI(ABC):
             request_kwargs["data"] = data
         
         # 记录请求日志
-        logger.debug(
-            f"API请求: {method.value} {url}",
-            category=LogCategory.API,
-            extra={
-                "service_name": self.service_name,
-                "method": method.value,
-                "url": url,
-                "params": params,
-                "has_json_data": json_data is not None,
-                "has_form_data": data is not None
-            }
-        )
+        logger.debug(f"[{self.service_name}] API请求: {method.value} {url}")
         
         # 发送请求
         return await self._make_request_with_retry(method, url, **request_kwargs)
@@ -480,12 +406,7 @@ class BaseAPI(ABC):
                         return str(first_cluster)
             return None
         except Exception as e:
-            logger.error(
-                "获取集群列表失败",
-                category=LogCategory.API,
-                error=e,
-                extra={"service_name": self.service_name}
-            )
+            logger.error(f"[{self.service_name}] 获取集群列表失败: {e}")
             return None
     
     def __repr__(self) -> str:

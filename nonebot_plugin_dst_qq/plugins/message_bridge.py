@@ -34,10 +34,10 @@ from nonebot.exception import FinishedException
 # 导入配置和工具
 from ..config import get_config
 from ..database import ChatHistoryDatabase
-from ..logger import get_logger, LogCategory
+from nonebot import logger
 from ..cache_manager import cache_manager
 
-logger = get_logger(__name__)
+# Using nonebot logger directly
 
 
 class ChatMode(Enum):
@@ -207,7 +207,7 @@ class DMPApiClient:
                     return data.get("data", [])
                 return []
         except Exception as e:
-            logger.error("获取集群列表失败", category=LogCategory.API, error=e)
+            logger.error(f"获取集群列表失败: {e}")
             return []
     
     async def get_worlds(self, cluster_name: str) -> List[str]:
@@ -219,7 +219,7 @@ class DMPApiClient:
                     return cluster.get("worlds", [])
             return []
         except Exception as e:
-            logger.error("获取世界列表失败", category=LogCategory.API, error=e)
+            logger.error(f"获取世界列表失败: {e}")
             return []
     
     async def get_chat_logs(self, cluster_name: str, world_name: str, lines: int = 50) -> List[str]:
@@ -336,7 +336,7 @@ class MessageParser:
                 if message_time < startup_time:
                     # 检查是否可能是跨日的情况（消息时间很晚，启动时间很早）
                     if not (message_time.hour >= 20 and startup_time.hour <= 4):
-                        logger.debug(f"跳过启动前的历史消息: {timestamp} < {startup_time.strftime('%H:%M:%S')}", category=LogCategory.MESSAGE)
+                        logger.debug(f"跳过启动前的历史消息: {timestamp} < {startup_time.strftime('%H:%M:%S')}")
                         return None
             
             # 检查消息类型和内容
@@ -364,7 +364,7 @@ class MessageParser:
                     raw_content=log_entry
                 )
         except Exception as e:
-            logger.error("解析游戏消息失败", category=LogCategory.MESSAGE, error=e)
+            logger.error(f"解析游戏消息失败: {e}")
             return None
 
 
@@ -464,7 +464,7 @@ class MessageBridge:
         self.last_sync_time: Dict[str, datetime] = {}
         self.startup_time: Optional[datetime] = None
         
-        logger.info("消息互通核心组件初始化完成", category=LogCategory.MESSAGE)
+        logger.success("消息互通核心组件初始化完成")
     
     async def start(self):
         """启动消息互通服务"""
@@ -472,11 +472,11 @@ class MessageBridge:
             return
         
         if not self.config.message.enable_message_bridge:
-            logger.info("消息互通功能已禁用", category=LogCategory.MESSAGE)
+            logger.info("消息互通功能已禁用")
             return
         
         # 重启时清理所有会话状态，重新计算互通
-        logger.info("清理所有会话状态，重新计算互通", category=LogCategory.MESSAGE)
+        logger.info("清理所有会话状态，重新计算互通")
         self.session_manager.sessions.clear()
         self.session_manager.group_sessions.clear()
         
@@ -492,7 +492,7 @@ class MessageBridge:
         # 启动消息同步任务
         self.sync_task = asyncio.create_task(self._sync_loop())
         
-        logger.info(f"消息互通服务已启动，启动时间: {self.startup_time.strftime('%H:%M:%S')}，将过滤此时间之前的历史消息", category=LogCategory.MESSAGE)
+        logger.success(f"消息互通服务已启动，启动时间: {self.startup_time.strftime('%H:%M:%S')}，将过滤此时间之前的历史消息")
     
     async def stop(self):
         """停止消息互通服务"""
@@ -505,7 +505,7 @@ class MessageBridge:
             except asyncio.CancelledError:
                 pass
         
-        logger.info("消息互通服务已停止", category=LogCategory.MESSAGE)
+        logger.info("消息互通服务已停止")
     
     async def create_user_session(self, user_id: int, chat_mode: ChatMode, group_id: Optional[int] = None) -> bool:
         """创建用户会话"""
@@ -529,7 +529,7 @@ class MessageBridge:
             
             return True
         except Exception as e:
-            logger.error(f"创建用户会话失败 user:{user_id}: {str(e)}", category=LogCategory.MESSAGE)
+            logger.error(f"创建用户会话失败 user:{user_id}: {str(e)}")
             return False
     
     async def _auto_configure_session(self, session: UserSession):
@@ -571,7 +571,7 @@ class MessageBridge:
                         session.target_world = self.config.message.default_target_world or "Master"
                 
             except Exception as e:
-                logger.error(f"自动配置会话失败，使用默认配置 ERROR: {e}", category=LogCategory.MESSAGE)
+                logger.error(f"自动配置会话失败，使用默认配置 ERROR: {e}")
                 # 确保会话有基本的配置
                 if not session.target_cluster:
                     session.target_cluster = self.config.message.default_target_cluster or "Master"
@@ -585,7 +585,7 @@ class MessageBridge:
             )
             
         except Exception as e:
-            logger.error("自动配置会话失败，使用默认配置", category=LogCategory.MESSAGE, error=e)
+            logger.error(f"自动配置会话失败，使用默认配置: {e}")
             # 确保有基本的配置
             if not session.target_cluster:
                 session.target_cluster = "Master"
@@ -627,7 +627,7 @@ class MessageBridge:
             
             return success
         except Exception as e:
-            logger.error("发送QQ消息到游戏失败", category=LogCategory.MESSAGE, error=e)
+            logger.error(f"发送QQ消息到游戏失败: {e}")
             return False
     
     async def _sync_loop(self):
@@ -637,7 +637,7 @@ class MessageBridge:
                 await self._sync_game_messages()
                 await asyncio.sleep(self.config.message.sync_interval)
             except Exception as e:
-                logger.error("消息同步出错", category=LogCategory.MESSAGE, error=e)
+                logger.error(f"消息同步出错: {e}")
                 await asyncio.sleep(5)
     
     async def _sync_game_messages(self):
@@ -661,7 +661,7 @@ class MessageBridge:
             await self._distribute_messages(all_new_messages, active_sessions)
             
         except Exception as e:
-            logger.error("同步游戏消息失败", category=LogCategory.MESSAGE, error=e)
+            logger.error(f"同步游戏消息失败: {e}")
     
     async def _collect_new_messages(self) -> List[GameMessage]:
         """收集所有新消息"""
@@ -707,7 +707,7 @@ class MessageBridge:
                                     )
             
         except Exception as e:
-            logger.error("收集新消息失败", category=LogCategory.MESSAGE, error=e)
+            logger.error(f"收集新消息失败: {e}")
         
         return new_messages
     
@@ -738,7 +738,7 @@ class MessageBridge:
                     await bot.send_private_msg(user_id=session.user_id, message=message_content)
                     session.update_activity()
                 except Exception as e:
-                    logger.error(f"发送私聊消息失败: {e}", category=LogCategory.MESSAGE)
+                    logger.error(f"发送私聊消息失败: {e}")
             
             # 发送给群聊（每个群只发送一次）
             for group_id, group_sessions_list in group_sessions.items():
@@ -748,7 +748,7 @@ class MessageBridge:
                     for session in group_sessions_list:
                         session.update_activity()
                 except Exception as e:
-                    logger.error(f"发送群聊消息失败: {e}", category=LogCategory.MESSAGE)
+                    logger.error(f"发送群聊消息失败: {e}")
             
             # 输出分发的消息详情（用于调试）
             for i, msg in enumerate(messages):
@@ -764,7 +764,7 @@ class MessageBridge:
             )
             
         except Exception as e:
-            logger.error("分发消息失败", category=LogCategory.MESSAGE, error=e)
+            logger.error(f"分发消息失败: {e}")
     
     def _format_messages_batch(self, messages: List[GameMessage]) -> str:
         """批量格式化消息"""
@@ -1068,7 +1068,7 @@ async def handle_user_message(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         # NoneBot 的正常结束流程，重新抛出
         raise
     except Exception as e:
-        logger.error(f"处理用户消息失败 user:{user_id}: {str(e)}", category=LogCategory.MESSAGE)
+        logger.error(f"处理用户消息失败 user:{user_id}: {str(e)}")
         # 只在私聊模式下提示错误
         session = message_bridge.session_manager.get_session(user_id)
         if session and session.chat_mode == ChatMode.PRIVATE:
