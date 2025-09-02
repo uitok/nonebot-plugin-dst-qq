@@ -43,24 +43,11 @@ class OutputModeManager:
             self._user_modes[user_id] = mode
             self._mode_timestamps[user_id] = time.time()
             
-            logger.info(
-                f"用户 {user_id} 设置输出模式为: {mode.value}",
-                category=LogCategory.SYSTEM,
-                extra={
-                    "user_id": user_id,
-                    "mode": mode.value,
-                    "timestamp": self._mode_timestamps[user_id]
-                }
-            )
+            logger.info(f"用户 {user_id} 设置输出模式为: {mode.value}")
             return True
             
         except Exception as e:
-            logger.error(
-                f"设置用户输出模式失败: {e}",
-                category=LogCategory.SYSTEM,
-                error=e,
-                extra={"user_id": user_id, "mode": mode.value if mode else None}
-            )
+            logger.error(f"设置用户输出模式失败: {e}")
             return False
     
     def get_user_mode(self, user_id: str) -> OutputMode:
@@ -85,11 +72,7 @@ class OutputModeManager:
             if current_time - set_time > self._mode_expire_time:
                 # 模式已过期，清除设置
                 self._cleanup_user_mode(user_id)
-                logger.info(
-                    f"用户 {user_id} 的输出模式已过期，重置为默认模式",
-                    category=LogCategory.SYSTEM,
-                    extra={"user_id": user_id}
-                )
+                logger.info(f"用户 {user_id} 的输出模式已过期，重置为默认模式")
                 return self._default_mode
         
         return self._user_modes[user_id]
@@ -111,20 +94,11 @@ class OutputModeManager:
         """
         try:
             self._cleanup_user_mode(user_id)
-            logger.info(
-                f"用户 {user_id} 输出模式已重置为默认模式",
-                category=LogCategory.SYSTEM,
-                extra={"user_id": user_id}
-            )
+            logger.info(f"用户 {user_id} 输出模式已重置为默认模式")
             return True
             
         except Exception as e:
-            logger.error(
-                f"重置用户输出模式失败: {e}",
-                category=LogCategory.SYSTEM,
-                error=e,
-                extra={"user_id": user_id}
-            )
+            logger.error(f"重置用户输出模式失败: {e}")
             return False
     
     def get_mode_info(self, user_id: str) -> Dict[str, any]:
@@ -187,22 +161,14 @@ class OutputModeManager:
             self._cleanup_user_mode(user_id)
         
         if expired_users:
-            logger.info(
-                f"清理了 {len(expired_users)} 个过期的输出模式设置",
-                category=LogCategory.SYSTEM,
-                extra={"expired_count": len(expired_users), "expired_users": expired_users}
-            )
+            logger.info(f"清理了 {len(expired_users)} 个过期的输出模式设置")
         
         return len(expired_users)
     
     def set_default_mode(self, mode: OutputMode):
         """设置默认模式"""
         self._default_mode = mode
-        logger.info(
-            f"默认输出模式设置为: {mode.value}",
-            category=LogCategory.SYSTEM,
-            extra={"default_mode": mode.value}
-        )
+        logger.info(f"默认输出模式设置为: {mode.value}")
     
     def set_expire_time(self, seconds: int):
         """
@@ -212,11 +178,7 @@ class OutputModeManager:
             seconds: 过期时间（秒），0表示不过期
         """
         self._mode_expire_time = seconds
-        logger.info(
-            f"输出模式过期时间设置为: {seconds}秒",
-            category=LogCategory.SYSTEM,
-            extra={"expire_time": seconds}
-        )
+        logger.info(f"输出模式过期时间设置为: {seconds}秒")
     
     def get_stats(self) -> Dict[str, any]:
         """
