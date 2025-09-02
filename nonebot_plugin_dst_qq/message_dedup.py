@@ -117,6 +117,10 @@ def dedup_message(func):
 # 全局用户图片模式状态
 _user_image_modes = set()
 
+# 磁盘空间失败计数器 - 连续失败过多次后临时禁用图片模式
+_disk_error_count = 0
+_max_disk_errors = 3
+
 def set_user_image_mode(user_id: str, enabled: bool):
     """设置用户图片模式"""
     global _user_image_modes
@@ -154,6 +158,19 @@ async def send_with_dedup(bot, event, message):
     
     # 简化的图片模式检查 - 使用全局字典
     try:
+        # 检查磁盘错误计数 - 如果磁盘错误过多，临时禁用图片模式
+        global _disk_error_count, _max_disk_errors
+        if _disk_error_count >= _max_disk_errors:
+            print(f"⚠️ 磁盘错误过多({_disk_error_count}次)，临时禁用图片模式")
+            # 强制使用文字模式
+            try:
+                result = await bot.send(event, message)
+                print(f"✅ Alconna文字消息发送成功: {result}")
+            except Exception as send_error:
+                print(f"❌ Alconna文字消息发送失败: {send_error}")
+                raise
+            return
+        
         # 检查用户是否设置了图片模式
         print(f"🔍 当前图片模式用户列表: {_user_image_modes}")
         if user_id in _user_image_modes:
@@ -274,6 +291,13 @@ async def _send_image_with_onebot_api(bot, event, image_data):
         
     except Exception as send_error:
         print(f"❌ OneBot API图片发送失败: {send_error}")
+        
+        # 检查是否是磁盘空间错误
+        if "ENOSPC" in str(send_error) or "no space left" in str(send_error):
+            global _disk_error_count
+            _disk_error_count += 1
+            print(f"💾 磁盘空间错误计数增加: {_disk_error_count}/{_max_disk_errors}")
+        
         # 回退到文本消息
         print(f"🔄 图片发送失败，回退到文本")
         fallback_text = "📷 图片内容（由于发送失败，请切换到文字模式查看详细信息）"

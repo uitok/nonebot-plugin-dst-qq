@@ -40,7 +40,7 @@ async def convert_text_to_image_async(text: str) -> str:
         text = "空消息"
     
     # 检查文字长度，太长的文字直接返回文本避免生成大图片
-    if len(text) > 500:  # 超过500字符直接返回文本
+    if len(text) > 200:  # 超过200字符直接返回文本
         logger.info(f"文字过长({len(text)}字符)，直接返回文本模式")
         return text
     
@@ -61,8 +61,8 @@ async def convert_text_to_image_async(text: str) -> str:
                 # 尝试使用更基础参数
                 pic_bytes = await text_to_pic(text=text)
             
-            # 检查图片大小，如果太大就返回文本 - 严格限制避免磁盘空间问题
-            max_image_size = 50 * 1024  # 减少到50KB限制
+            # 检查图片大小，如果太大就返回文本 - 极严格限制避免磁盘空间问题
+            max_image_size = 15 * 1024  # 减少到15KB限制
             if len(pic_bytes) > max_image_size:
                 logger.warning(f"图片太大({len(pic_bytes)} bytes > {max_image_size} bytes)，回退到文本模式")
                 return text
@@ -195,9 +195,9 @@ async def _fallback_text_to_image(text: str) -> str:
         image.save(buffer, format='JPEG', quality=85, optimize=True)
         buffer.seek(0)
         
-        # 检查图片大小 - 更严格的限制
+        # 检查图片大小 - 极严格的限制
         pic_bytes = buffer.getvalue()
-        max_image_size = 50 * 1024  # 减少到50KB限制
+        max_image_size = 15 * 1024  # 减少到15KB限制
         
         # 如果JPEG还是太大，尝试更低质量
         if len(pic_bytes) > max_image_size:
