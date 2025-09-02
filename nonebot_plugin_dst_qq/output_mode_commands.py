@@ -7,18 +7,14 @@ from nonebot.adapters import Bot, Event
 from nonebot_plugin_alconna import on_alconna, AlconnaQuery, Query
 from arclet.alconna import Alconna, Args
 
-from .output_mode_manager import get_output_mode_manager, OutputMode
 from .message_dedup import send_with_dedup, set_user_image_mode
 from nonebot import logger
-
-# 获取输出模式管理器
-output_mode_manager = get_output_mode_manager()
 
 # 切换模式命令
 switch_mode_cmd = on_alconna(
     Alconna("切换模式", Args["mode", str]),
     aliases={"切换输出模式", "输出模式", "switch_mode"},
-    priority=5,
+    priority=1,
     block=True
 )
 
@@ -32,15 +28,15 @@ async def handle_switch_mode(bot: Bot, event: Event, mode: Query[str] = AlconnaQ
     
     # 模式映射
     mode_mapping = {
-        "图片": OutputMode.IMAGE,
-        "图像": OutputMode.IMAGE, 
-        "image": OutputMode.IMAGE,
-        "img": OutputMode.IMAGE,
-        "pic": OutputMode.IMAGE,
-        "文字": OutputMode.TEXT,
-        "文本": OutputMode.TEXT,
-        "text": OutputMode.TEXT,
-        "txt": OutputMode.TEXT,
+        "图片": "image",
+        "图像": "image", 
+        "image": "image",
+        "img": "image",
+        "pic": "image",
+        "文字": "text",
+        "文本": "text",
+        "text": "text",
+        "txt": "text",
     }
     
     if mode not in mode_mapping:
@@ -51,7 +47,7 @@ async def handle_switch_mode(bot: Bot, event: Event, mode: Query[str] = AlconnaQ
     target_mode = mode_mapping[mode]
     
     # 使用简化的模式设置
-    if target_mode == OutputMode.IMAGE:
+    if target_mode == "image":
         set_user_image_mode(user_id, True)
         success_msg = "🖼️ 输出模式已切换为图片模式\n\n现在所有消息将以图片形式发送"
         print(f"✅ 用户 {user_id} 图片模式已设置")
@@ -60,7 +56,8 @@ async def handle_switch_mode(bot: Bot, event: Event, mode: Query[str] = AlconnaQ
         success_msg = "📝 输出模式已切换为文字模式\n\n现在所有消息将以文字形式发送"
         print(f"✅ 用户 {user_id} 文字模式已设置")
     
-    await send_with_dedup(bot, event, success_msg)
+    # 确认消息直接发送，不通过图片模式处理
+    await bot.send(event, success_msg)
 
 # 查看当前模式命令
 mode_status_cmd = on_alconna(
@@ -75,15 +72,16 @@ async def handle_mode_status(bot: Bot, event: Event):
     """处理查看模式状态命令"""
     user_id = str(event.get_user_id())
     
-    # 检查用户当前模式
-    is_image_mode = hasattr(send_with_dedup, '_user_image_modes') and user_id in send_with_dedup._user_image_modes
+    # 检查用户当前模式 - 直接检查全局变量
+    from .message_dedup import _user_image_modes
+    is_image_mode = user_id in _user_image_modes
     
     if is_image_mode:
         status_msg = "🖼️ 当前输出模式: 图片\n\n💡 使用 '切换模式 文字' 来切换为文字模式"
     else:
         status_msg = "📝 当前输出模式: 文字\n\n💡 使用 '切换模式 图片' 来切换为图片模式"
     
-    await send_with_dedup(bot, event, status_msg)
+    await bot.send(event, status_msg)
 
 # 重置模式命令  
 reset_mode_cmd = on_alconna(
@@ -99,7 +97,7 @@ async def handle_reset_mode(bot: Bot, event: Event):
     user_id = str(event.get_user_id())
     
     set_user_image_mode(user_id, False)
-    await send_with_dedup(bot, event, "✅ 输出模式已重置为默认文字模式")
+    await bot.send(event, "✅ 输出模式已重置为默认文字模式")
 
 # 模式帮助命令
 mode_help_cmd = on_alconna(
@@ -135,4 +133,4 @@ async def handle_mode_help(bot: Bot, event: Event):
 切换模式 文字
 模式状态"""
     
-    await send_with_dedup(bot, event, help_msg)
+    await bot.send(event, help_msg)

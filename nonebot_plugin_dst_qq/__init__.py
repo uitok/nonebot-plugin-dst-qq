@@ -115,8 +115,9 @@ try:
     from . import cluster_commands
     print("✅ cluster_commands 导入成功")
     
-    # 导入输出模式切换命令 (暂时注释掉)
-    # from . import output_mode_commands
+    # 导入输出模式切换命令
+    from . import output_mode_commands
+    print("✅ output_mode_commands 导入成功")
     
     print("✅ 所有子插件模块加载成功")
 except Exception as e:
