@@ -64,8 +64,8 @@ class MessageDedup:
         return True
 
 
-# 全局去重器实例
-_dedup_instance = MessageDedup(window_seconds=10)
+# 全局去重器实例 - 增加时间窗口到60秒，减少误判
+_dedup_instance = MessageDedup(window_seconds=60)
 
 
 def dedup_message(func):
@@ -149,109 +149,148 @@ async def send_with_dedup(bot, event, message):
     
     print(f"🔍 检查用户 {user_id} 的图片模式设置...")
     
-    if _dedup_instance.should_send(user_id, str(message)):
-        # 简化的图片模式检查 - 使用全局字典
-        try:
-            # 检查用户是否设置了图片模式
-            print(f"🔍 当前图片模式用户列表: {_user_image_modes}")
-            if user_id in _user_image_modes:
-                print(f"🔍 用户 {user_id} 图片模式已激活")
-                
-                # 检查是否需要转换为图片 - 排除已经是图片消息的情况
-                is_already_image = False
-                if hasattr(message, 'type') and message.type == 'image':
-                    is_already_image = True
-                elif isinstance(message, str) and (
-                    message.startswith("base64://") or 
-                    message.startswith("file://") or 
-                    message.startswith("[CQ:image")
-                ):
-                    is_already_image = True
-                
-                if isinstance(message, str) and not is_already_image:
-                    try:
-                        from .text_to_image import convert_text_to_image_async
-                        print(f"📸 转换文字为图片: {message[:50]}...")
-                        image_message = await convert_text_to_image_async(message)
-                        
-                        # 检查转换结果 - 如果返回的是原文本或非图片格式，说明转换失败或图片太大
-                        is_image_result = (
-                            isinstance(image_message, str) and 
-                            (image_message.startswith("base64://") or image_message.startswith("file://"))
-                        )
-                        
-                        if image_message == message or not is_image_result:
-                            print(f"🔄 图片转换未成功，直接发送文本消息")
-                            try:
-                                result = await bot.send(event, message)
-                                print(f"✅ 文本消息发送成功: {result}")
-                            except Exception as text_error:
-                                print(f"❌ 文本消息发送失败: {text_error}")
-                            return
-                        
-                        print(f"✅ 图片转换成功，发送图片消息")
-                        try:
-                            # 创建图片消息段
-                            from nonebot.adapters.onebot.v11 import MessageSegment
-                            image_msg = MessageSegment.image(image_message)
-                            print(f"📤 发送MessageSegment图片消息")
-                            print(f"🔍 图片消息段详情: type={image_msg.type}, data keys={list(image_msg.data.keys())}")
-                            print(f"🔍 图片数据前缀: {image_msg.data.get('file', '')[:50]}...")
-                            print(f"🔍 目标用户: {user_id}, 事件类型: {type(event).__name__}")
-                            
-                            result = await bot.send(event, image_msg)
-                            print(f"✅ 图片消息发送成功: {result}")
-                            
-                            # 检查返回结果
-                            if isinstance(result, dict):
-                                message_id = result.get('message_id')
-                                print(f"📝 消息ID: {message_id}")
-                                if message_id:
-                                    print(f"🎯 消息已成功发送并获得ID: {message_id}")
-                                else:
-                                    print(f"⚠️ 消息发送成功但未获得消息ID，可能被过滤")
-                            
-                            # 清理临时文件
-                            if image_message.startswith("file://"):
-                                temp_path = image_message.replace("file://", "")
-                                try:
-                                    import os
-                                    if os.path.exists(temp_path):
-                                        os.unlink(temp_path)
-                                        print(f"🗑️ 已清理临时文件: {temp_path}")
-                                except Exception as cleanup_error:
-                                    print(f"⚠️ 清理临时文件失败: {cleanup_error}")
-                            
-                            return
-                        except Exception as send_error:
-                            print(f"❌ 图片消息发送失败: {send_error}")
-                            print(f"🔍 图片消息类型: {type(image_message)}")
-                            print(f"🔍 图片消息内容前缀: {str(image_message)[:100]}...")
-                            # 尝试发送原文本作为备选方案
-                            print(f"🔄 尝试发送原文本...")
-                            try:
-                                result = await bot.send(event, message)
-                                print(f"✅ 原文本发送成功: {result}")
-                            except Exception as text_error:
-                                print(f"❌ 原文本发送也失败: {text_error}")
-                            return
-                    except Exception as e:
-                        print(f"⚠️ 文字转图片失败，使用原文本发送: {e}")
-                        await bot.send(event, message)
+    # 暂时禁用去重检查，先解决发送问题
+    print(f"🔄 临时跳过去重检查，直接处理消息")
+    
+    # 简化的图片模式检查 - 使用全局字典
+    try:
+        # 检查用户是否设置了图片模式
+        print(f"🔍 当前图片模式用户列表: {_user_image_modes}")
+        if user_id in _user_image_modes:
+            print(f"🔍 用户 {user_id} 图片模式已激活 - 使用OneBot V11原生API")
+            
+            # 检查是否需要转换为图片 - 排除已经是图片消息的情况
+            is_already_image = False
+            if hasattr(message, 'type') and message.type == 'image':
+                is_already_image = True
+            elif isinstance(message, str) and (
+                message.startswith("base64://") or 
+                message.startswith("file://") or 
+                message.startswith("[CQ:image")
+            ):
+                is_already_image = True
+            
+            if isinstance(message, str) and not is_already_image:
+                try:
+                    from .text_to_image import convert_text_to_image_async
+                    print(f"📸 转换文字为图片: {message[:50]}...")
+                    image_message = await convert_text_to_image_async(message)
+                    
+                    # 检查转换结果 - 如果返回的是原文本或非图片格式，说明转换失败或图片太大
+                    is_image_result = (
+                        isinstance(image_message, str) and 
+                        (image_message.startswith("base64://") or image_message.startswith("file://"))
+                    )
+                    
+                    if image_message == message or not is_image_result:
+                        print(f"🔄 图片转换未成功，使用OneBot API发送文本")
+                        await _send_with_onebot_api(bot, event, message)
                         return
+                    
+                    print(f"✅ 图片转换成功，使用OneBot API发送图片")
+                    await _send_image_with_onebot_api(bot, event, image_message)
+                    return
+                    
+                except Exception as e:
+                    print(f"⚠️ 文字转图片失败，使用OneBot API发送文本: {e}")
+                    await _send_with_onebot_api(bot, event, message)
+                    return
             else:
-                print(f"🔍 用户 {user_id} 文字模式")
-            
-            # 文字模式或转换失败，直接发送
+                # 直接发送已有的图片
+                await _send_image_with_onebot_api(bot, event, message)
+                return
+        else:
+            print(f"🔍 用户 {user_id} 文字模式 - 使用Alconna方式")
+        
+        # 文字模式，使用标准方式（Alconna）
+        try:
+            result = await bot.send(event, message)
+            print(f"✅ Alconna文字消息发送成功: {result}")
+        except Exception as send_error:
+            print(f"❌ Alconna文字消息发送失败: {send_error}")
+            raise
+        
+    except Exception as e:
+        print(f"⚠️ 处理输出模式时出错: {e}")
+        await bot.send(event, message)
+
+async def _send_with_onebot_api(bot, event, message):
+    """使用OneBot V11原生API发送文本消息"""
+    try:
+        # 获取用户ID和群ID
+        user_id = str(event.get_user_id())
+        
+        # 判断是群聊还是私聊
+        if hasattr(event, 'group_id'):
+            # 群聊
+            group_id = event.group_id
+            print(f"📤 OneBot API群聊发送到群 {group_id}")
+            result = await bot.send_group_msg(group_id=group_id, message=str(message))
+        else:
+            # 私聊
+            print(f"📤 OneBot API私聊发送给用户 {user_id}")
+            result = await bot.send_private_msg(user_id=int(user_id), message=str(message))
+        
+        print(f"✅ OneBot API文本发送成功: {result}")
+        return result
+        
+    except Exception as send_error:
+        print(f"❌ OneBot API文本发送失败: {send_error}")
+        # 回退到标准方法
+        try:
+            result = await bot.send(event, message)
+            print(f"✅ 回退到Alconna发送成功: {result}")
+            return result
+        except Exception as fallback_error:
+            print(f"❌ 回退发送也失败: {fallback_error}")
+            raise
+
+async def _send_image_with_onebot_api(bot, event, image_data):
+    """使用OneBot V11原生API发送图片消息"""
+    try:
+        # 获取用户ID和群ID
+        user_id = str(event.get_user_id())
+        
+        # 构建图片CQ码
+        if image_data.startswith("base64://"):
+            cq_image = f"[CQ:image,file={image_data}]"
+        elif image_data.startswith("file://"):
+            file_path = image_data.replace("file://", "")
+            cq_image = f"[CQ:image,file=file:///{file_path}]"
+        else:
+            cq_image = f"[CQ:image,file={image_data}]"
+        
+        print(f"🔍 构建的CQ码: {cq_image[:80]}...")
+        
+        # 判断是群聊还是私聊
+        if hasattr(event, 'group_id'):
+            # 群聊
+            group_id = event.group_id
+            print(f"📤 OneBot API群聊图片发送到群 {group_id}")
+            result = await bot.send_group_msg(group_id=group_id, message=cq_image)
+        else:
+            # 私聊
+            print(f"📤 OneBot API私聊图片发送给用户 {user_id}")
+            result = await bot.send_private_msg(user_id=int(user_id), message=cq_image)
+        
+        print(f"✅ OneBot API图片发送成功: {result}")
+        
+        # 清理临时文件
+        if image_data.startswith("file://"):
+            temp_path = image_data.replace("file://", "")
             try:
-                result = await bot.send(event, message)
-                print(f"✅ 文字消息发送成功: {result}")
-            except Exception as send_error:
-                print(f"❌ 文字消息发送失败: {send_error}")
-                raise
-            
-        except Exception as e:
-            print(f"⚠️ 处理输出模式时出错: {e}")
-            await bot.send(event, message)
-    else:
-        print(f"🔇 消息去重: 跳过重复消息发送给用户 {user_id}")
+                import os
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                    print(f"🗑️ 已清理临时文件: {temp_path}")
+            except Exception as cleanup_error:
+                print(f"⚠️ 清理临时文件失败: {cleanup_error}")
+        
+        return result
+        
+    except Exception as send_error:
+        print(f"❌ OneBot API图片发送失败: {send_error}")
+        # 回退到文本消息
+        print(f"🔄 图片发送失败，回退到文本")
+        fallback_text = "📷 图片内容（由于发送失败，请切换到文字模式查看详细信息）"
+        await _send_with_onebot_api(bot, event, fallback_text)
