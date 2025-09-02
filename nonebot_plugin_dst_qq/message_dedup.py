@@ -161,7 +161,11 @@ async def send_with_dedup(bot, event, message):
                 is_already_image = False
                 if hasattr(message, 'type') and message.type == 'image':
                     is_already_image = True
-                elif isinstance(message, str) and (message.startswith("base64://") or message.startswith("[CQ:image")):
+                elif isinstance(message, str) and (
+                    message.startswith("base64://") or 
+                    message.startswith("file://") or 
+                    message.startswith("[CQ:image")
+                ):
                     is_already_image = True
                 
                 if isinstance(message, str) and not is_already_image:
@@ -170,8 +174,13 @@ async def send_with_dedup(bot, event, message):
                         print(f"📸 转换文字为图片: {message[:50]}...")
                         image_message = await convert_text_to_image_async(message)
                         
-                        # 检查转换结果 - 如果返回的是原文本或非base64，说明转换失败或图片太大
-                        if image_message == message or not (isinstance(image_message, str) and image_message.startswith("base64://")):
+                        # 检查转换结果 - 如果返回的是原文本或非图片格式，说明转换失败或图片太大
+                        is_image_result = (
+                            isinstance(image_message, str) and 
+                            (image_message.startswith("base64://") or image_message.startswith("file://"))
+                        )
+                        
+                        if image_message == message or not is_image_result:
                             print(f"🔄 图片转换未成功，直接发送文本消息")
                             try:
                                 result = await bot.send(event, message)
@@ -186,8 +195,33 @@ async def send_with_dedup(bot, event, message):
                             from nonebot.adapters.onebot.v11 import MessageSegment
                             image_msg = MessageSegment.image(image_message)
                             print(f"📤 发送MessageSegment图片消息")
+                            print(f"🔍 图片消息段详情: type={image_msg.type}, data keys={list(image_msg.data.keys())}")
+                            print(f"🔍 图片数据前缀: {image_msg.data.get('file', '')[:50]}...")
+                            print(f"🔍 目标用户: {user_id}, 事件类型: {type(event).__name__}")
+                            
                             result = await bot.send(event, image_msg)
                             print(f"✅ 图片消息发送成功: {result}")
+                            
+                            # 检查返回结果
+                            if isinstance(result, dict):
+                                message_id = result.get('message_id')
+                                print(f"📝 消息ID: {message_id}")
+                                if message_id:
+                                    print(f"🎯 消息已成功发送并获得ID: {message_id}")
+                                else:
+                                    print(f"⚠️ 消息发送成功但未获得消息ID，可能被过滤")
+                            
+                            # 清理临时文件
+                            if image_message.startswith("file://"):
+                                temp_path = image_message.replace("file://", "")
+                                try:
+                                    import os
+                                    if os.path.exists(temp_path):
+                                        os.unlink(temp_path)
+                                        print(f"🗑️ 已清理临时文件: {temp_path}")
+                                except Exception as cleanup_error:
+                                    print(f"⚠️ 清理临时文件失败: {cleanup_error}")
+                            
                             return
                         except Exception as send_error:
                             print(f"❌ 图片消息发送失败: {send_error}")
