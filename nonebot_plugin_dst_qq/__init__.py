@@ -119,6 +119,10 @@ try:
     from . import output_mode_commands
     print("✅ output_mode_commands 导入成功")
     
+    # 导入调试命令
+    from . import debug_commands
+    print("✅ debug_commands 导入成功")
+    
     print("✅ 所有子插件模块加载成功")
 except Exception as e:
     print(f"⚠️ 子插件加载失败: {e}")
