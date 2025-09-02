@@ -169,17 +169,24 @@ async def send_with_dedup(bot, event, message):
                         from .text_to_image import convert_text_to_image_async
                         print(f"📸 转换文字为图片: {message[:50]}...")
                         image_message = await convert_text_to_image_async(message)
+                        
+                        # 检查转换结果 - 如果返回的是原文本或非base64，说明转换失败或图片太大
+                        if image_message == message or not (isinstance(image_message, str) and image_message.startswith("base64://")):
+                            print(f"🔄 图片转换未成功，直接发送文本消息")
+                            try:
+                                result = await bot.send(event, message)
+                                print(f"✅ 文本消息发送成功: {result}")
+                            except Exception as text_error:
+                                print(f"❌ 文本消息发送失败: {text_error}")
+                            return
+                        
                         print(f"✅ 图片转换成功，发送图片消息")
                         try:
                             # 创建图片消息段
-                            if isinstance(image_message, str) and image_message.startswith("base64://"):
-                                from nonebot.adapters.onebot.v11 import MessageSegment
-                                image_msg = MessageSegment.image(image_message)
-                                print(f"📤 发送MessageSegment图片消息")
-                                result = await bot.send(event, image_msg)
-                            else:
-                                print(f"📤 直接发送图片消息: {type(image_message)}")
-                                result = await bot.send(event, image_message)
+                            from nonebot.adapters.onebot.v11 import MessageSegment
+                            image_msg = MessageSegment.image(image_message)
+                            print(f"📤 发送MessageSegment图片消息")
+                            result = await bot.send(event, image_msg)
                             print(f"✅ 图片消息发送成功: {result}")
                             return
                         except Exception as send_error:
