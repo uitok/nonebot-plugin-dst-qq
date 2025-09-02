@@ -44,16 +44,23 @@ async def convert_text_to_image_async(text: str) -> str:
         try:
             from nonebot_plugin_htmlrender import text_to_pic
             
-            # 使用htmlrender生成图片 - 使用最简参数
+            # 使用htmlrender生成图片 - 优化参数减少文件大小
             try:
-                pic_bytes = await text_to_pic(text=text)
+                pic_bytes = await text_to_pic(
+                    text=text,
+                    width=600,  # 减少宽度以减小文件大小
+                    device_scale_factor=1.0  # 避免高分辨率
+                )
             except Exception as e:
                 logger.error(f"text_to_pic调用失败: {e}")
-                # 尝试使用更多参数
-                pic_bytes = await text_to_pic(
-                    text,
-                    width=700
-                )
+                # 尝试使用更基础参数
+                pic_bytes = await text_to_pic(text=text)
+            
+            # 检查图片大小，如果太大就返回文本
+            max_image_size = 100 * 1024  # 100KB限制
+            if len(pic_bytes) > max_image_size:
+                logger.warning(f"图片太大({len(pic_bytes)} bytes > {max_image_size} bytes)，回退到文本模式")
+                return text
             
             # 转换为base64
             img_base64 = base64.b64encode(pic_bytes).decode()
@@ -170,13 +177,37 @@ async def _fallback_text_to_image(text: str) -> str:
             
             y_offset += line_height + line_spacing
         
-        # 转换为base64
+        # 转换为base64 - 先尝试JPEG压缩
         buffer = io.BytesIO()
-        image.save(buffer, format='PNG')
+        
+        # 转换为RGB（JPEG不支持RGBA）
+        if image.mode != 'RGB':
+            rgb_image = Image.new('RGB', image.size, background_color)
+            rgb_image.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+            image = rgb_image
+        
+        # 尝试JPEG压缩
+        image.save(buffer, format='JPEG', quality=85, optimize=True)
         buffer.seek(0)
         
-        img_base64 = base64.b64encode(buffer.getvalue()).decode()
-        logger.debug(f"PIL生成图片大小: {len(buffer.getvalue())} bytes, base64长度: {len(img_base64)}")
+        # 检查图片大小
+        pic_bytes = buffer.getvalue()
+        max_image_size = 100 * 1024  # 100KB限制
+        
+        # 如果JPEG还是太大，尝试更低质量
+        if len(pic_bytes) > max_image_size:
+            buffer = io.BytesIO()
+            image.save(buffer, format='JPEG', quality=60, optimize=True)
+            buffer.seek(0)
+            pic_bytes = buffer.getvalue()
+            
+            # 如果还是太大，返回文本
+            if len(pic_bytes) > max_image_size:
+                logger.warning(f"PIL图片太大({len(pic_bytes)} bytes > {max_image_size} bytes)，回退到文本模式")
+                return text
+        
+        img_base64 = base64.b64encode(pic_bytes).decode()
+        logger.debug(f"PIL生成图片大小: {len(pic_bytes)} bytes, base64长度: {len(img_base64)}")
         
         # OneBot支持的图片格式 - 返回base64字符串让外层处理
         return f"base64://{img_base64}"
