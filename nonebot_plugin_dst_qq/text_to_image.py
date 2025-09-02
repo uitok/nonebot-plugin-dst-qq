@@ -39,16 +39,21 @@ async def convert_text_to_image_async(text: str) -> str:
     if not text.strip():
         text = "空消息"
     
+    # 检查文字长度，太长的文字直接返回文本避免生成大图片
+    if len(text) > 500:  # 超过500字符直接返回文本
+        logger.info(f"文字过长({len(text)}字符)，直接返回文本模式")
+        return text
+    
     # 检查htmlrender是否可用
     if _check_htmlrender():
         try:
             from nonebot_plugin_htmlrender import text_to_pic
             
-            # 使用htmlrender生成图片 - 优化参数减少文件大小
+            # 使用htmlrender生成图片 - 严格控制尺寸减少文件大小
             try:
                 pic_bytes = await text_to_pic(
                     text=text,
-                    width=600,  # 减少宽度以减小文件大小
+                    width=400,  # 进一步减少宽度
                     device_scale_factor=1.0  # 避免高分辨率
                 )
             except Exception as e:
@@ -56,8 +61,8 @@ async def convert_text_to_image_async(text: str) -> str:
                 # 尝试使用更基础参数
                 pic_bytes = await text_to_pic(text=text)
             
-            # 检查图片大小，如果太大就返回文本
-            max_image_size = 100 * 1024  # 100KB限制
+            # 检查图片大小，如果太大就返回文本 - 严格限制避免磁盘空间问题
+            max_image_size = 50 * 1024  # 减少到50KB限制
             if len(pic_bytes) > max_image_size:
                 logger.warning(f"图片太大({len(pic_bytes)} bytes > {max_image_size} bytes)，回退到文本模式")
                 return text
@@ -94,13 +99,13 @@ async def _fallback_text_to_image(text: str) -> str:
         if not text.strip():
             text = "空消息"
         
-        # 字体设置
-        font_size = 20
+        # 字体设置 - 减小尺寸以控制文件大小
+        font_size = 16  # 减小字体
         font_color = "#2c3e50"
         background_color = "#f8f9fa"
-        padding = 15
-        max_width = 700
-        line_spacing = 6
+        padding = 10    # 减少边距
+        max_width = 400 # 大幅减少宽度
+        line_spacing = 4 # 减少行间距
         
         # 加载字体
         font_paths = [
@@ -190,21 +195,28 @@ async def _fallback_text_to_image(text: str) -> str:
         image.save(buffer, format='JPEG', quality=85, optimize=True)
         buffer.seek(0)
         
-        # 检查图片大小
+        # 检查图片大小 - 更严格的限制
         pic_bytes = buffer.getvalue()
-        max_image_size = 100 * 1024  # 100KB限制
+        max_image_size = 50 * 1024  # 减少到50KB限制
         
         # 如果JPEG还是太大，尝试更低质量
         if len(pic_bytes) > max_image_size:
             buffer = io.BytesIO()
-            image.save(buffer, format='JPEG', quality=60, optimize=True)
+            image.save(buffer, format='JPEG', quality=40, optimize=True)  # 降低质量到40
             buffer.seek(0)
             pic_bytes = buffer.getvalue()
             
-            # 如果还是太大，返回文本
+            # 如果还是太大，尝试最低质量
             if len(pic_bytes) > max_image_size:
-                logger.warning(f"PIL图片太大({len(pic_bytes)} bytes > {max_image_size} bytes)，回退到文本模式")
-                return text
+                buffer = io.BytesIO()
+                image.save(buffer, format='JPEG', quality=20, optimize=True)  # 最低质量20
+                buffer.seek(0)  
+                pic_bytes = buffer.getvalue()
+                
+                # 如果还是太大，返回文本
+                if len(pic_bytes) > max_image_size:
+                    logger.warning(f"PIL图片太大({len(pic_bytes)} bytes > {max_image_size} bytes)，回退到文本模式")
+                    return text
         
         img_base64 = base64.b64encode(pic_bytes).decode()
         logger.debug(f"PIL生成图片大小: {len(pic_bytes)} bytes, base64长度: {len(img_base64)}")
