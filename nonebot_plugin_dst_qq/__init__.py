@@ -1,9 +1,4 @@
 from pathlib import Path
-from nonebot import require
-
-# 声明插件依赖
-require("nonebot_plugin_localstore")
-
 import nonebot
 from nonebot.plugin import PluginMetadata
 
@@ -81,19 +76,53 @@ from .config import get_config_manager, get_config
 
 # 导入子插件模块，确保Alconna命令被正确注册
 try:
-    # 导入子插件模块
-    from .plugins import dmp_api, dmp_advanced, message_bridge
+    # 逐个导入子插件模块以确定问题所在
+    print("🔍 开始导入子插件模块...")
+    
+    try:
+        from .plugins import dmp_api
+        print("✅ dmp_api 导入成功")
+    except Exception as e:
+        print(f"❌ dmp_api 导入失败: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    try:
+        from .plugins import dmp_advanced
+        print("✅ dmp_advanced 导入成功")
+    except Exception as e:
+        print(f"❌ dmp_advanced 导入失败: {e}")
+    
+    try:
+        from .plugins import message_bridge
+        print("✅ message_bridge 导入成功")
+    except Exception as e:
+        print(f"❌ message_bridge 导入失败: {e}")
+    
     # 导入缓存管理命令
     from . import cache_commands
+    print("✅ cache_commands 导入成功")
+    
     # 导入数据压缩管理命令
     from . import compression_commands
+    print("✅ compression_commands 导入成功")
+    
     # 导入配置管理命令
     from . import config_commands
+    print("✅ config_commands 导入成功")
+    
     # 导入集群管理命令
     from . import cluster_commands
+    print("✅ cluster_commands 导入成功")
+    
+    # 导入输出模式切换命令 (暂时注释掉)
+    # from . import output_mode_commands
+    
     print("✅ 所有子插件模块加载成功")
 except Exception as e:
     print(f"⚠️ 子插件加载失败: {e}")
+    import traceback
+    traceback.print_exc()
 
 # 插件启动时的初始化
 @nonebot.get_driver().on_startup
@@ -119,11 +148,11 @@ async def startup():
         else:
             print("⚠️ DMP服务器连接测试失败，请检查配置")
         
-        # 初始化集群管理器
+        # 初始化集群管理器 
         try:
+            from .cache_manager import cache_manager
             from .cluster_manager import init_cluster_manager
             from .plugins.dmp_api import dmp_api
-            from .cache_manager import cache_manager
             
             cluster_manager = init_cluster_manager(dmp_api, cache_manager)
             # 预热集群列表缓存

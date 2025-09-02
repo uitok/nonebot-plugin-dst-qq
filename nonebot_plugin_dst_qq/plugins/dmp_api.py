@@ -17,6 +17,7 @@ dmp_api = None
 
 # 导入新的配置管理
 from ..config import get_config
+from ..message_dedup import send_with_dedup
 
 async def send_long_message(bot: Bot, event: Event, title: str, content: str, max_length: int = 800):
     """
@@ -32,7 +33,7 @@ async def send_long_message(bot: Bot, event: Event, title: str, content: str, ma
     try:
         # 如果消息长度在阈值内，直接发送
         if len(content) <= max_length:
-            await bot.send(event, content)
+            await send_with_dedup(bot, event, content)
             return
         
         # 获取机器人信息
@@ -101,7 +102,7 @@ async def send_long_message(bot: Bot, event: Event, title: str, content: str, ma
     except Exception as e:
         # 如果合并转发失败，降级为普通消息发送
         print(f"⚠️ 合并转发失败，降级为普通消息: {e}")
-        await bot.send(event, content)
+        await send_with_dedup(bot, event, content)
 
 # 创建Alconna命令
 world_cmd = Alconna("世界")
@@ -110,6 +111,7 @@ sys_cmd = Alconna("系统")
 players_cmd = Alconna("玩家")
 connection_cmd = Alconna("直连")
 help_cmd = Alconna("菜单")
+mode_cmd = Alconna("切换模式", Args["mode", str])
 
 # 创建命令别名
 world_cmd_eng = Alconna("world")
@@ -126,6 +128,7 @@ sys_matcher = on_alconna(sys_cmd)
 players_matcher = on_alconna(players_cmd)
 connection_matcher = on_alconna(connection_cmd)
 help_matcher = on_alconna(help_cmd)
+mode_matcher = on_alconna(mode_cmd)
 
 world_eng_matcher = on_alconna(world_cmd_eng)
 room_eng_matcher = on_alconna(room_cmd_eng)
@@ -158,6 +161,21 @@ class DMPAPI(BaseAPI):
             print(f"⚠️ 获取集群列表异常: {e}")
             return APIResponse(code=500, message=f"获取集群列表异常: {e}")
     
+    async def get_current_cluster(self) -> str:
+        """获取当前使用的集群名称，优先使用集群管理器设置的集群"""
+        try:
+            from ..cluster_manager import get_cluster_manager
+            cluster_manager = get_cluster_manager()
+            if cluster_manager:
+                current_cluster = await cluster_manager.get_current_cluster()
+                if current_cluster:
+                    return current_cluster
+        except ImportError:
+            pass
+        
+        # 如果集群管理器不可用或没有设置当前集群，回退到第一个可用集群
+        return await self.get_first_available_cluster()
+    
     async def get_first_available_cluster(self) -> str:
         """获取第一个可用的集群名称"""
         response = await self.get_available_clusters()
@@ -180,7 +198,7 @@ class DMPAPI(BaseAPI):
     async def get_cluster_info(self, cluster_name: str = None) -> APIResponse:
         """获取集群详细信息"""
         if not cluster_name:
-            cluster_name = await self.get_first_available_cluster()
+            cluster_name = await self.get_current_cluster()
         
         response = await self.get_available_clusters()
         if response.success and response.data:
@@ -195,7 +213,7 @@ class DMPAPI(BaseAPI):
     async def get_world_info(self, cluster_name: str = None) -> APIResponse:
         """获取世界信息 - 缓存1分钟内存，5分钟文件"""
         if not cluster_name:
-            cluster_name = await self.get_first_available_cluster()
+            cluster_name = await self.get_current_cluster()
         
         params = {"clusterName": cluster_name}
         return await self.get("/home/world_info", params=params)
@@ -204,7 +222,7 @@ class DMPAPI(BaseAPI):
     async def get_room_info(self, cluster_name: str = None) -> APIResponse:
         """获取房间信息 - 缓存3分钟内存，15分钟文件"""
         if not cluster_name:
-            cluster_name = await self.get_first_available_cluster()
+            cluster_name = await self.get_current_cluster()
         
         params = {"clusterName": cluster_name}
         return await self.get("/home/room_info", params=params)
@@ -218,7 +236,7 @@ class DMPAPI(BaseAPI):
     async def get_players(self, cluster_name: str = None) -> APIResponse:
         """获取在线玩家列表 - 缓存30秒内存，3分钟文件"""
         if not cluster_name:
-            cluster_name = await self.get_first_available_cluster()
+            cluster_name = await self.get_current_cluster()
         
         params = {"clusterName": cluster_name}
         return await self.get("/setting/player/list", params=params)
@@ -227,7 +245,7 @@ class DMPAPI(BaseAPI):
     async def get_connection_info(self, cluster_name: str = None) -> APIResponse:
         """获取服务器直连信息 - 缓存10分钟内存，30分钟文件"""
         if not cluster_name:
-            cluster_name = await self.get_first_available_cluster()
+            cluster_name = await self.get_current_cluster()
         
         params = {"clusterName": cluster_name}
         return await self.get("/external/api/connection_code", params=params)
@@ -237,14 +255,12 @@ class DMPAPI(BaseAPI):
 async def handle_world_cmd(bot: Bot, event: Event):
     """处理世界信息命令"""
     try:
-        # 先获取可用的集群
-        available_clusters = await dmp_api.get_available_clusters()
-        if not available_clusters.success:
-            await bot.send(event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
+        # 使用当前选择的集群（这个方法内部会处理集群可用性检查）
+        cluster_name = await dmp_api.get_current_cluster()
+        if not cluster_name:
+            await send_with_dedup(bot, event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
             return
         
-        # 使用第一个可用集群
-        cluster_name = await dmp_api.get_first_available_cluster()
         result = await dmp_api.get_world_info(cluster_name)
         
         if result.success:
@@ -332,25 +348,23 @@ async def handle_world_cmd(bot: Bot, event: Event):
         else:
             response = f"❌ 获取世界信息失败: {result.message or '未知错误'}"
         
-        await bot.send(event, response)
+        await send_with_dedup(bot, event, response)
         
     except Exception as e:
         error_msg = f"❌ 处理世界信息命令时发生错误: {str(e)}"
         print(f"⚠️ {error_msg}")
-        await bot.send(event, error_msg)
+        await send_with_dedup(bot, event, error_msg)
 
 @room_matcher.handle()
 async def handle_room_cmd(bot: Bot, event: Event):
     """处理房间信息命令"""
     try:
-        # 先获取可用的集群
-        available_clusters = await dmp_api.get_available_clusters()
-        if not available_clusters.success:
-            await bot.send(event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
+        # 使用当前选择的集群（这个方法内部会处理集群可用性检查）
+        cluster_name = await dmp_api.get_current_cluster()
+        if not cluster_name:
+            await send_with_dedup(bot, event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
             return
         
-        # 使用第一个可用集群
-        cluster_name = await dmp_api.get_first_available_cluster()
         result = await dmp_api.get_room_info(cluster_name)
         
         if result.success:
@@ -417,12 +431,12 @@ async def handle_room_cmd(bot: Bot, event: Event):
         else:
             response = f"❌ 获取房间信息失败: {result.message or '未知错误'}"
         
-        await bot.send(event, response)
+        await send_with_dedup(bot, event, response)
         
     except Exception as e:
         error_msg = f"❌ 处理房间信息命令时发生错误: {str(e)}"
         print(f"⚠️ {error_msg}")
-        await bot.send(event, error_msg)
+        await send_with_dedup(bot, event, error_msg)
 
 @sys_matcher.handle()
 async def handle_sys_cmd(bot: Bot, event: Event):
@@ -499,25 +513,22 @@ async def handle_sys_cmd(bot: Bot, event: Event):
         else:
             response = f"❌ 获取系统信息失败: {result.message or '未知错误'}"
         
-        await bot.send(event, response)
+        await send_with_dedup(bot, event, response)
         
     except Exception as e:
         error_msg = f"❌ 处理系统信息命令时发生错误: {str(e)}"
         print(f"⚠️ {error_msg}")
-        await bot.send(event, error_msg)
+        await send_with_dedup(bot, event, error_msg)
 
 @players_matcher.handle()
 async def handle_players_cmd(bot: Bot, event: Event):
     """处理玩家列表命令"""
     try:
-        # 先获取可用的集群
-        available_clusters = await dmp_api.get_available_clusters()
-        if not available_clusters.success:
-            await bot.send(event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
+        # 使用当前选择的集群（这个方法内部会处理集群可用性检查）
+        cluster_name = await dmp_api.get_current_cluster()
+        if not cluster_name:
+            await send_with_dedup(bot, event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
             return
-        
-        # 使用第一个可用集群
-        cluster_name = await dmp_api.get_first_available_cluster()
         result = await dmp_api.get_players(cluster_name)
         
         if result.success:
@@ -609,25 +620,22 @@ async def handle_players_cmd(bot: Bot, event: Event):
         else:
             response = f"❌ 获取玩家列表失败: {result.message or '未知错误'}"
         
-        await bot.send(event, response)
+        await send_with_dedup(bot, event, response)
         
     except Exception as e:
         error_msg = f"❌ 处理玩家列表命令时发生错误: {str(e)}"
         print(f"⚠️ {error_msg}")
-        await bot.send(event, error_msg)
+        await send_with_dedup(bot, event, error_msg)
 
 @connection_matcher.handle()
 async def handle_connection_cmd(bot: Bot, event: Event):
     """处理直连信息命令"""
     try:
-        # 先获取可用的集群
-        available_clusters = await dmp_api.get_available_clusters()
-        if not available_clusters.success:
-            await bot.send(event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
+        # 使用当前选择的集群（这个方法内部会处理集群可用性检查）
+        cluster_name = await dmp_api.get_current_cluster()
+        if not cluster_name:
+            await send_with_dedup(bot, event, "❌ 无法获取可用集群列表，请检查DMP服务器连接")
             return
-        
-        # 使用第一个可用集群
-        cluster_name = await dmp_api.get_first_available_cluster()
         result = await dmp_api.get_connection_info(cluster_name)
         
         if result.success:
@@ -726,12 +734,12 @@ async def handle_connection_cmd(bot: Bot, event: Event):
         else:
             response = f"❌ 获取直连信息失败: {result.message or '未知错误'}"
         
-        await bot.send(event, response)
+        await send_with_dedup(bot, event, response)
         
     except Exception as e:
         error_msg = f"❌ 处理直连信息命令时发生错误: {str(e)}"
         print(f"⚠️ {error_msg}")
-        await bot.send(event, error_msg)
+        await send_with_dedup(bot, event, error_msg)
 
 @help_matcher.handle()
 async def handle_help_cmd(bot: Bot, event: Event):
@@ -757,14 +765,42 @@ async def handle_help_cmd(bot: Bot, event: Event):
 ⚙️ /管理命令 - 管理员菜单
 🏗️ /高级功能 - 高级管理功能
 
+🖼️ 输出模式
+📝 切换模式 图片 - 切换到图片输出
+📄 切换模式 文字 - 切换到文字输出  
+
 💡 提示: 支持中英文命令，智能集群选择"""
         
-        await bot.send(event, help_text)
+        await send_with_dedup(bot, event, help_text)
         
     except Exception as e:
         error_msg = f"❌ 处理帮助命令时发生错误: {str(e)}"
         print(f"⚠️ {error_msg}")
-        await bot.send(event, error_msg)
+        await send_with_dedup(bot, event, error_msg)
+
+@mode_matcher.handle()
+async def handle_mode_cmd(bot: Bot, event: Event):
+    """处理模式切换命令"""
+    try:
+        from ..message_dedup import set_user_image_mode
+        
+        # 获取命令参数
+        mode = event.get_message().extract_plain_text().replace("切换模式", "").strip()
+        user_id = str(event.get_user_id())
+        
+        if mode in ["图片", "image", "img", "pic"]:
+            set_user_image_mode(user_id, True)
+            await send_with_dedup(bot, event, "🖼️ 输出模式已切换为图片模式\n\n现在所有消息将以图片形式发送")
+        elif mode in ["文字", "文本", "text", "txt"]:
+            set_user_image_mode(user_id, False)
+            await send_with_dedup(bot, event, "📝 输出模式已切换为文字模式\n\n现在所有消息将以文字形式发送")
+        else:
+            await send_with_dedup(bot, event, "❌ 不支持的输出模式\n\n可用模式: 图片、文字")
+            
+    except Exception as e:
+        error_msg = f"❌ 处理模式切换命令时发生错误: {str(e)}"
+        print(f"⚠️ {error_msg}")
+        await send_with_dedup(bot, event, error_msg)
 
 # 英文命令处理器
 @world_eng_matcher.handle()

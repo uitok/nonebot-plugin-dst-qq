@@ -80,6 +80,21 @@ class DMPAdvancedAPI(BaseAPI):
         """获取所有可用的集群列表 - 缓存5分钟内存，10分钟文件"""
         return await self.get("/setting/clusters")
     
+    async def get_current_cluster(self) -> str:
+        """获取当前使用的集群名称，优先使用集群管理器设置的集群"""
+        try:
+            from ..cluster_manager import get_cluster_manager
+            cluster_manager = get_cluster_manager()
+            if cluster_manager:
+                current_cluster = await cluster_manager.get_current_cluster()
+                if current_cluster:
+                    return current_cluster
+        except ImportError:
+            pass
+        
+        # 如果集群管理器不可用或没有设置当前集群，回退到第一个可用集群
+        return await self.get_first_available_cluster()
+    
     async def get_first_available_cluster(self) -> str:
         """获取第一个可用的集群名称"""
         response = await self.get_available_clusters()
@@ -97,7 +112,7 @@ class DMPAdvancedAPI(BaseAPI):
     async def get_backup_list(self, cluster_name: str = None) -> APIResponse:
         """获取备份列表 - 缓存1分钟内存，5分钟文件"""
         if not cluster_name:
-            cluster_name = await self.get_first_available_cluster()
+            cluster_name = await self.get_current_cluster()
             if not cluster_name:
                 return APIResponse(code=404, message="没有可用的集群")
         
@@ -113,7 +128,7 @@ class DMPAdvancedAPI(BaseAPI):
     async def create_backup(self, cluster_name: str = None) -> APIResponse:
         """创建备份"""
         if not cluster_name:
-            cluster_name = await self.get_first_available_cluster()
+            cluster_name = await self.get_current_cluster()
             if not cluster_name:
                 return APIResponse(code=404, message="没有可用的集群")
         
@@ -140,7 +155,7 @@ class DMPAdvancedAPI(BaseAPI):
     async def rollback_world(self, days: int, cluster_name: str = None) -> APIResponse:
         """回档世界"""
         if not cluster_name:
-            cluster_name = await self.get_first_available_cluster()
+            cluster_name = await self.get_current_cluster()
             if not cluster_name:
                 return APIResponse(code=404, message="没有可用的集群")
         
@@ -165,7 +180,7 @@ class DMPAdvancedAPI(BaseAPI):
     async def reset_world(self, cluster_name: str = None, world_name: str = "Master") -> APIResponse:
         """重置世界"""
         if not cluster_name:
-            cluster_name = await self.get_first_available_cluster()
+            cluster_name = await self.get_current_cluster()
             if not cluster_name:
                 return APIResponse(code=404, message="没有可用的集群")
         
@@ -185,7 +200,7 @@ class DMPAdvancedAPI(BaseAPI):
     async def get_chat_history(self, cluster_name: str = None, world_name: str = "", lines: int = 50) -> APIResponse:
         """获取聊天历史"""
         if not cluster_name:
-            cluster_name = await self.get_first_available_cluster()
+            cluster_name = await self.get_current_cluster()
             if not cluster_name:
                 return APIResponse(code=404, message="没有可用的集群")
         
@@ -207,7 +222,7 @@ class DMPAdvancedAPI(BaseAPI):
     async def get_chat_statistics(self, cluster_name: str = None) -> APIResponse:
         """获取聊天统计"""
         if not cluster_name:
-            cluster_name = await self.get_first_available_cluster()
+            cluster_name = await self.get_current_cluster()
             if not cluster_name:
                 return APIResponse(code=404, message="没有可用的集群")
         

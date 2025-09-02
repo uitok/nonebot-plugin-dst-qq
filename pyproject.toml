@@ -79,7 +79,7 @@ exclude = [
 adapters = [
     { name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" }
 ]
-plugins = ["nonebot_plugin_alconna", "nonebot_plugin_localstore", "nonebot_plugin_apscheduler"]
+plugins = ["nonebot_plugin_alconna", "nonebot_plugin_localstore", "nonebot_plugin_apscheduler", "nonebot_plugin_txt2img"]
 plugin_dirs = ["nonebot_plugin_dst_qq"]
 builtin_plugins = []
 

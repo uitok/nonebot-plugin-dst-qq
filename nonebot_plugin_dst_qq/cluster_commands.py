@@ -12,10 +12,8 @@ from arclet.alconna import Alconna, Args, Option
 from nonebot_plugin_alconna import on_alconna, Match
 
 from .cluster_manager import get_cluster_manager
-from .logger import get_logger
+from nonebot import logger
 from .utils import is_superuser
-
-logger = get_logger(__name__)
 
 # ========================================
 # 集群状态查看命令
