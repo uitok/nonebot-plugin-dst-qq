@@ -8,14 +8,12 @@ import json
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from .logger import get_logger, LogCategory
-
-logger = get_logger(__name__)
+from nonebot import logger
 
 def migrate_from_env() -> Optional[Dict[str, Any]]:
     """从环境变量迁移配置到新的配置格式"""
     
-    logger.info("开始从环境变量迁移配置", category=LogCategory.SYSTEM)
+    logger.info("开始从环境变量迁移配置")
     
     # 检查是否有环境变量配置
     env_vars = {
@@ -30,10 +28,10 @@ def migrate_from_env() -> Optional[Dict[str, Any]]:
     env_vars = {k: v for k, v in env_vars.items() if v is not None}
     
     if not env_vars:
-        logger.info("未发现环境变量配置，跳过迁移", category=LogCategory.SYSTEM)
+        logger.info("未发现环境变量配置，跳过迁移")
         return None
     
-    logger.info(f"发现 {len(env_vars)} 个环境变量配置项", category=LogCategory.SYSTEM)
+    logger.info(f"发现 {len(env_vars)} 个环境变量配置项")
     
     try:
         # 创建新的配置结构
@@ -49,15 +47,15 @@ def migrate_from_env() -> Optional[Dict[str, Any]]:
         # DMP配置迁移
         if 'DMP_BASE_URL' in env_vars:
             new_config['dmp']['base_url'] = env_vars['DMP_BASE_URL']
-            logger.info(f"迁移DMP服务器地址: {env_vars['DMP_BASE_URL']}", category=LogCategory.SYSTEM)
+            logger.info(f"迁移DMP服务器地址: {env_vars['DMP_BASE_URL']}")
         
         if 'DMP_TOKEN' in env_vars:
             new_config['dmp']['token'] = env_vars['DMP_TOKEN']
-            logger.info("迁移DMP API令牌", category=LogCategory.SYSTEM)
+            logger.info("迁移DMP API令牌")
         
         if 'DEFAULT_CLUSTER' in env_vars:
             new_config['dmp']['default_cluster'] = env_vars['DEFAULT_CLUSTER']
-            logger.info(f"迁移默认集群: {env_vars['DEFAULT_CLUSTER']}", category=LogCategory.SYSTEM)
+            logger.info(f"迁移默认集群: {env_vars['DEFAULT_CLUSTER']}")
         
         # 机器人配置迁移
         if 'SUPERUSERS' in env_vars:
@@ -72,21 +70,21 @@ def migrate_from_env() -> Optional[Dict[str, Any]]:
                     superusers = [user.strip().strip('"\'') for user in superusers_str.split(',')]
                 
                 new_config['bot']['superusers'] = superusers
-                logger.info(f"迁移超级用户列表: {len(superusers)} 个用户", category=LogCategory.SYSTEM)
+                logger.info(f"迁移超级用户列表: {len(superusers)} 个用户")
             except Exception as e:
-                logger.warning(f"解析超级用户列表失败: {e}", category=LogCategory.SYSTEM)
+                logger.warning(f"解析超级用户列表失败: {e}")
         
         # 日志配置迁移
         if 'DEBUG' in env_vars:
             debug_mode = env_vars['DEBUG'].lower() in ('true', '1', 'yes', 'on')
             new_config['logging']['level'] = 'DEBUG' if debug_mode else 'INFO'
-            logger.info(f"迁移调试模式: {'DEBUG' if debug_mode else 'INFO'}", category=LogCategory.SYSTEM)
+            logger.info(f"迁移调试模式: {'DEBUG' if debug_mode else 'INFO'}")
         
-        logger.info("配置迁移完成", category=LogCategory.SYSTEM)
+        logger.success("配置迁移完成")
         return new_config
         
     except Exception as e:
-        logger.error(f"配置迁移失败: {e}", category=LogCategory.SYSTEM)
+        logger.error(f"配置迁移失败: {e}")
         return None
 
 def create_migration_backup():
@@ -103,14 +101,14 @@ def create_migration_backup():
             with open(backup_file, 'w', encoding='utf-8') as f:
                 json.dump(env_backup, f, indent=2, ensure_ascii=False)
             
-            logger.info(f"环境变量备份已保存到: {backup_file}", category=LogCategory.SYSTEM)
+            logger.info(f"环境变量备份已保存到: {backup_file}")
             return backup_file
         else:
-            logger.info("未发现需要备份的环境变量", category=LogCategory.SYSTEM)
+            logger.info("未发现需要备份的环境变量")
             return None
             
     except Exception as e:
-        logger.error(f"创建环境变量备份失败: {e}", category=LogCategory.SYSTEM)
+        logger.error(f"创建环境变量备份失败: {e}")
         return None
 
 def show_migration_guide() -> str:
@@ -168,7 +166,7 @@ def auto_migrate_if_needed():
     
     # 如果配置文件不存在，尝试从环境变量迁移
     if not config_file.exists():
-        logger.info("配置文件不存在，尝试从环境变量迁移", category=LogCategory.SYSTEM)
+        logger.info("配置文件不存在，尝试从环境变量迁移")
         
         # 创建备份
         backup_file = create_migration_backup()
@@ -182,7 +180,7 @@ def auto_migrate_if_needed():
                 with open(config_file, 'w', encoding='utf-8') as f:
                     json.dump(migrated_config, f, indent=2, ensure_ascii=False)
                 
-                logger.info(f"配置迁移成功，新配置已保存到: {config_file}", category=LogCategory.SYSTEM)
+                logger.success(f"配置迁移成功，新配置已保存到: {config_file}")
                 
                 # 显示迁移指南
                 print("\n" + "="*60)
@@ -194,13 +192,13 @@ def auto_migrate_if_needed():
                 return True
                 
             except Exception as e:
-                logger.error(f"保存迁移配置失败: {e}", category=LogCategory.SYSTEM)
+                logger.error(f"保存迁移配置失败: {e}")
                 return False
         else:
-            logger.info("未发现环境变量配置，创建默认配置", category=LogCategory.SYSTEM)
+            logger.info("未发现环境变量配置，创建默认配置")
             return False
     else:
-        logger.info("配置文件已存在，跳过迁移", category=LogCategory.SYSTEM)
+        logger.info("配置文件已存在，跳过迁移")
         return False
 
 if __name__ == "__main__":

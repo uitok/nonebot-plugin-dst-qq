@@ -8,13 +8,36 @@ from pydantic import BaseModel
 import httpx
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from .logger import get_logger, LogCategory
+from nonebot import logger
+
+# Lazy import localstore only when needed
+def _get_localstore():
+    """Lazy import and initialization of localstore"""
+    try:
+        from nonebot import require
+        require("nonebot_plugin_localstore")
+        import nonebot_plugin_localstore as store
+        return store
+    except Exception:
+        # Fallback to plugin directory if localstore fails
+        return None
 
 T = TypeVar('T')
 
 # ===== 配置常量 =====
-DEFAULT_CONFIG_FILE = Path(__file__).parent / "app_config.json"
-BACKUP_CONFIG_FILE = Path(__file__).parent / "app_config.backup.json"
+# 动态获取配置目录
+def get_config_dir() -> Path:
+    """获取配置目录，优先使用localstore"""
+    store = _get_localstore()
+    if store:
+        try:
+            return store.get_plugin_config_dir()
+        except Exception:
+            pass
+    # Fallback to plugin directory
+    return Path(__file__).parent
+
+# 延迟初始化配置路径
 TEMPLATE_CONFIG_FILE = Path(__file__).parent / "app_config.template.json"
 
 # ================================================================================
@@ -78,11 +101,10 @@ class ConfigChangeHandler(FileSystemEventHandler):
     
     def __init__(self, config_manager: 'ConfigManager'):
         self.config_manager = config_manager
-        self.logger = get_logger(__name__)
     
     def on_modified(self, event):
         if not event.is_directory and event.src_path.endswith('app_config.json'):
-            self.logger.info(f"检测到配置文件变更: {event.src_path}", category=LogCategory.SYSTEM)
+            logger.info(f"检测到配置文件变更: {event.src_path}")
             # 延迟重载，避免文件正在写入时读取
             threading.Timer(1.0, self.config_manager._reload_config).start()
 
@@ -187,9 +209,9 @@ class ConfigManager:
     """配置管理器"""
     
     def __init__(self, config_file: Optional[Path] = None):
-        self.config_file = config_file or DEFAULT_CONFIG_FILE
-        self.backup_file = BACKUP_CONFIG_FILE
-        self.logger = get_logger(__name__)
+        config_dir = get_config_dir()
+        self.config_file = config_file or (config_dir / "app_config.json")
+        self.backup_file = config_dir / "app_config.backup.json"
         
         self._config: Optional[Config] = None
         self._observers: List[Callable[[Config], None]] = []
@@ -213,9 +235,9 @@ class ConfigManager:
                 recursive=False
             )
             self._file_observer.start()
-            self.logger.info("配置文件监听器启动成功", category=LogCategory.SYSTEM)
+            logger.success("配置文件监听器启动成功")
         except Exception as e:
-            self.logger.error(f"启动配置文件监听器失败: {e}", category=LogCategory.SYSTEM)
+            logger.error(f"启动配置文件监听器失败: {e}")
     
     def _load_config(self):
         """加载配置"""
@@ -226,7 +248,7 @@ class ConfigManager:
                     with open(self.config_file, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                     self._config = Config(**data)
-                    self.logger.info(f"从文件加载配置成功: {self.config_file}", category=LogCategory.SYSTEM)
+                    logger.success(f"从文件加载配置成功: {self.config_file}")
                 else:
                     # 尝试从模板创建配置文件
                     if self._create_config_from_template():
@@ -234,26 +256,26 @@ class ConfigManager:
                         with open(self.config_file, 'r', encoding='utf-8') as f:
                             data = json.load(f)
                         self._config = Config(**data)
-                        self.logger.info(f"从模板创建配置文件成功: {self.config_file}", category=LogCategory.SYSTEM)
+                        logger.success(f"从模板创建配置文件成功: {self.config_file}")
                     else:
                         # 创建默认配置
                         self._config = Config()
                         self._save_config()
-                        self.logger.info("创建默认配置文件", category=LogCategory.SYSTEM)
+                        logger.info("创建默认配置文件")
                 
 
                 
             except Exception as e:
-                self.logger.error(f"加载配置失败: {e}", category=LogCategory.SYSTEM)
+                logger.error(f"加载配置失败: {e}")
                 if self.backup_file.exists():
                     try:
                         # 尝试从备份恢复
                         with open(self.backup_file, 'r', encoding='utf-8') as f:
                             data = json.load(f)
                         self._config = Config(**data)
-                        self.logger.info("从备份配置恢复成功", category=LogCategory.SYSTEM)
+                        logger.success("从备份配置恢复成功")
                     except Exception as backup_error:
-                        self.logger.error(f"从备份恢复失败: {backup_error}", category=LogCategory.SYSTEM)
+                        logger.error(f"从备份恢复失败: {backup_error}")
                         self._config = Config()
                 else:
                     self._config = Config()
@@ -283,10 +305,10 @@ class ConfigManager:
                 
                 return True
             else:
-                self.logger.warning("配置模板文件不存在", category=LogCategory.SYSTEM)
+                logger.warning("配置模板文件不存在")
                 return False
         except Exception as e:
-            self.logger.error(f"从模板创建配置文件失败: {e}", category=LogCategory.SYSTEM)
+            logger.error(f"从模板创建配置文件失败: {e}")
             return False
     
     def _save_config(self):
@@ -307,10 +329,10 @@ class ConfigManager:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(self._config.dict(), f, indent=2, ensure_ascii=False)
             
-            self.logger.info("配置保存成功", category=LogCategory.SYSTEM)
+            logger.success("配置保存成功")
             
         except Exception as e:
-            self.logger.error(f"保存配置失败: {e}", category=LogCategory.SYSTEM)
+            logger.error(f"保存配置失败: {e}")
             raise ConfigReloadError(f"保存配置失败: {e}")
     
     def _reload_config(self):
@@ -324,12 +346,12 @@ class ConfigManager:
                 try:
                     observer(self._config)
                 except Exception as e:
-                    self.logger.error(f"配置变更通知失败: {e}", category=LogCategory.SYSTEM)
+                    logger.error(f"配置变更通知失败: {e}")
             
-            self.logger.info("配置热重载成功", category=LogCategory.SYSTEM)
+            logger.success("配置热重载成功")
             
         except Exception as e:
-            self.logger.error(f"配置热重载失败: {e}", category=LogCategory.SYSTEM)
+            logger.error(f"配置热重载失败: {e}")
     
     def get_config(self) -> Config:
         """获取当前配置"""
@@ -366,13 +388,13 @@ class ConfigManager:
                     try:
                         observer(self._config)
                     except Exception as e:
-                        self.logger.error(f"配置变更通知失败: {e}", category=LogCategory.SYSTEM)
+                        logger.error(f"配置变更通知失败: {e}")
                 
-                self.logger.info("配置更新成功", category=LogCategory.SYSTEM)
+                logger.success("配置更新成功")
                 return True
                 
         except Exception as e:
-            self.logger.error(f"配置更新失败: {e}", category=LogCategory.SYSTEM)
+            logger.error(f"配置更新失败: {e}")
             return False
     
     def add_observer(self, observer: Callable[[Config], None]):
@@ -401,7 +423,7 @@ class ConfigManager:
                 return True
                 
         except Exception as e:
-            self.logger.error(f"DMP连接测试失败: {e}", category=LogCategory.SYSTEM)
+            logger.error(f"DMP连接测试失败: {e}")
             return False
     
     def shutdown(self):
@@ -409,7 +431,7 @@ class ConfigManager:
         if self._file_observer:
             self._file_observer.stop()
             self._file_observer.join()
-        self.logger.info("配置管理器已关闭", category=LogCategory.SYSTEM)
+        logger.info("配置管理器已关闭")
 
 # 全局配置管理器实例
 _config_manager: Optional[ConfigManager] = None

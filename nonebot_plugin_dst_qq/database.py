@@ -598,9 +598,32 @@ class ChatHistoryDatabase:
             print(f"获取QQ消息失败: {e}")
             return []
     
-    async def sync_chat_logs(self, cluster_name: str, world_name: str = "World4", lines: int = 1000) -> dict:
+    async def get_current_cluster(self) -> str:
+        """获取当前使用的集群名称，优先使用集群管理器设置的集群"""
+        try:
+            from .cluster_manager import get_cluster_manager
+            cluster_manager = get_cluster_manager()
+            if cluster_manager:
+                current_cluster = await cluster_manager.get_current_cluster()
+                if current_cluster:
+                    return current_cluster
+        except ImportError:
+            pass
+        
+        # 如果集群管理器不可用，使用第一个可用集群作为回退
+        try:
+            from .plugins.dmp_api import dmp_api
+            return await dmp_api.get_current_cluster()
+        except Exception:
+            return "Master"  # 最终回退到默认集群
+    
+    async def sync_chat_logs(self, cluster_name: str = None, world_name: str = "World4", lines: int = 1000) -> dict:
         """同步聊天日志到数据库"""
         try:
+            # 如果没有指定集群名称，使用当前集群
+            if not cluster_name:
+                cluster_name = await self.get_current_cluster()
+            
             # 导入API模块
             from .plugins.dmp_api import dmp_api
             

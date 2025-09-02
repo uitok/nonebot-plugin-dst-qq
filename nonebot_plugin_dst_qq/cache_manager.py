@@ -21,14 +21,19 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, Callable, Awaitable
 from functools import wraps
 from collections import OrderedDict
-from nonebot import require
 from nonebot.log import logger
 
-# 声明插件依赖
-require("nonebot_plugin_localstore")
-
-# 导入 localstore 插件
-import nonebot_plugin_localstore as store
+# Lazy import localstore
+def _get_localstore():
+    """Lazy import and initialization of localstore"""
+    try:
+        from nonebot import require
+        require("nonebot_plugin_localstore")
+        import nonebot_plugin_localstore as store
+        return store
+    except Exception:
+        # Fallback to None if localstore fails
+        return None
 
 
 class LRUCache:
@@ -101,9 +106,24 @@ class CacheManager:
                  default_config_ttl: int = 3600):  # 1小时
         
         # 初始化存储目录
-        self.cache_dir = store.get_plugin_cache_dir()
-        self.config_dir = store.get_plugin_config_dir()
-        self.data_dir = store.get_plugin_data_dir()
+        store = _get_localstore()
+        if store:
+            try:
+                self.cache_dir = store.get_plugin_cache_dir()
+                self.config_dir = store.get_plugin_config_dir()
+                self.data_dir = store.get_plugin_data_dir()
+            except Exception:
+                # Fallback to plugin directory
+                plugin_dir = Path(__file__).parent
+                self.cache_dir = plugin_dir / "cache"
+                self.config_dir = plugin_dir / "config"
+                self.data_dir = plugin_dir / "data"
+        else:
+            # Fallback to plugin directory
+            plugin_dir = Path(__file__).parent
+            self.cache_dir = plugin_dir / "cache"
+            self.config_dir = plugin_dir / "config"
+            self.data_dir = plugin_dir / "data"
         
         # 创建子目录
         self.api_cache_dir = self.cache_dir / "api"
