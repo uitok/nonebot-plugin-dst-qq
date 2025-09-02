@@ -66,23 +66,8 @@ async def convert_text_to_image_async(text: str) -> str:
             img_base64 = base64.b64encode(pic_bytes).decode()
             logger.debug(f"HTMLRender生成图片大小: {len(pic_bytes)} bytes, base64长度: {len(img_base64)}")
             
-            # 尝试保存临时文件而不是使用base64
-            try:
-                import tempfile
-                import os
-                
-                # 创建临时文件
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-                    tmp_file.write(pic_bytes)
-                    temp_path = tmp_file.name
-                
-                logger.debug(f"HTMLRender临时图片保存到: {temp_path}")
-                return f"file://{temp_path}"
-                
-            except Exception as temp_error:
-                logger.warning(f"创建临时文件失败，使用base64: {temp_error}")
-                # OneBot支持的图片格式 - 返回base64字符串让外层处理
-                return f"base64://{img_base64}"
+            # 直接使用base64，避免NapCat临时文件路径问题
+            return f"base64://{img_base64}"
             
         except Exception as e:
             logger.error(f"HTMLRender生成图片失败，使用备用方案: {e}")
@@ -224,23 +209,8 @@ async def _fallback_text_to_image(text: str) -> str:
         img_base64 = base64.b64encode(pic_bytes).decode()
         logger.debug(f"PIL生成图片大小: {len(pic_bytes)} bytes, base64长度: {len(img_base64)}")
         
-        # 尝试保存临时文件而不是使用base64
-        try:
-            import tempfile
-            import os
-            
-            # 创建临时文件
-            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
-                tmp_file.write(pic_bytes)
-                temp_path = tmp_file.name
-            
-            logger.debug(f"PIL临时图片保存到: {temp_path}")
-            return f"file://{temp_path}"
-            
-        except Exception as temp_error:
-            logger.warning(f"创建临时文件失败，使用base64: {temp_error}")
-            # OneBot支持的图片格式 - 返回base64字符串让外层处理
-            return f"base64://{img_base64}"
+        # 直接使用base64，避免NapCat临时文件路径问题
+        return f"base64://{img_base64}"
         
     except Exception as e:
         logger.error(f"备用图片生成失败: {e}")

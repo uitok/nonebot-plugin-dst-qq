@@ -165,7 +165,6 @@ async def send_with_dedup(bot, event, message):
                 is_already_image = True
             elif isinstance(message, str) and (
                 message.startswith("base64://") or 
-                message.startswith("file://") or 
                 message.startswith("[CQ:image")
             ):
                 is_already_image = True
@@ -176,10 +175,10 @@ async def send_with_dedup(bot, event, message):
                     print(f"📸 转换文字为图片: {message[:50]}...")
                     image_message = await convert_text_to_image_async(message)
                     
-                    # 检查转换结果 - 如果返回的是原文本或非图片格式，说明转换失败或图片太大
+                    # 检查转换结果 - 如果返回的是原文本或非base64，说明转换失败或图片太大
                     is_image_result = (
                         isinstance(image_message, str) and 
-                        (image_message.startswith("base64://") or image_message.startswith("file://"))
+                        image_message.startswith("base64://")
                     )
                     
                     if image_message == message or not is_image_result:
@@ -251,12 +250,9 @@ async def _send_image_with_onebot_api(bot, event, image_data):
         # 获取用户ID和群ID
         user_id = str(event.get_user_id())
         
-        # 构建图片CQ码
+        # 构建图片CQ码 - 现在只处理base64格式
         if image_data.startswith("base64://"):
             cq_image = f"[CQ:image,file={image_data}]"
-        elif image_data.startswith("file://"):
-            file_path = image_data.replace("file://", "")
-            cq_image = f"[CQ:image,file=file:///{file_path}]"
         else:
             cq_image = f"[CQ:image,file={image_data}]"
         
@@ -274,18 +270,6 @@ async def _send_image_with_onebot_api(bot, event, image_data):
             result = await bot.send_private_msg(user_id=int(user_id), message=cq_image)
         
         print(f"✅ OneBot API图片发送成功: {result}")
-        
-        # 清理临时文件
-        if image_data.startswith("file://"):
-            temp_path = image_data.replace("file://", "")
-            try:
-                import os
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                    print(f"🗑️ 已清理临时文件: {temp_path}")
-            except Exception as cleanup_error:
-                print(f"⚠️ 清理临时文件失败: {cleanup_error}")
-        
         return result
         
     except Exception as send_error:
