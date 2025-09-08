@@ -12,15 +12,14 @@ import asyncio
 from datetime import datetime, time, timedelta
 from typing import Dict, Optional, Any
 from nonebot import require, get_driver
-from nonebot.log import logger
+from nonebot import logger
 from nonebot import get_bot
 
 # 声明插件依赖
 require("nonebot_plugin_apscheduler")
 
 from nonebot_plugin_apscheduler import scheduler
-from .database import chat_db
-from .data_archive_manager import archive_manager
+from .database import chat_history_db, archive_manager
 from .cache_manager import cache_manager
 
 
@@ -132,7 +131,7 @@ class DataMaintenanceScheduler:
             start_time = datetime.now()
             
             # 执行完整维护流程
-            maintenance_result = await chat_db.auto_maintenance()
+            maintenance_result = await chat_history_db.auto_maintenance()
             
             # 额外的深度清理
             cache_clear_result = await self._deep_cache_cleanup()
@@ -177,7 +176,7 @@ class DataMaintenanceScheduler:
         """系统监控任务"""
         try:
             # 检查数据库大小
-            db_stats = await chat_db.get_database_stats()
+            db_stats = await chat_history_db.get_database_stats()
             
             # 如果文件大小超过阈值，记录警告
             file_size_mb = db_stats.get("file_size_mb", 0)

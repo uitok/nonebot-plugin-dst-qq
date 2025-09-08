@@ -8,6 +8,7 @@ from nonebot_plugin_alconna import on_alconna
 from arclet.alconna import Alconna
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot import logger
+from .message_utils import send_message, handle_command_errors
 
 # 测试图片发送命令
 test_image_cmd = on_alconna(
@@ -18,47 +19,65 @@ test_image_cmd = on_alconna(
 )
 
 @test_image_cmd.handle()
+@handle_command_errors("测试图片")
 async def handle_test_image(bot: Bot, event: Event):
     """处理测试图片发送命令"""
     user_id = str(event.get_user_id())
     print(f"🧪 开始测试图片发送给用户: {user_id}")
     
-    try:
-        # 方法1: 尝试发送一个简单的文字图片
-        from .text_to_image import convert_text_to_image_async
-        test_text = "🧪 这是一个测试图片\n测试文字转图片功能"
-        
-        print(f"📸 生成测试图片...")
-        image_result = await convert_text_to_image_async(test_text)
-        print(f"🔍 图片生成结果: {type(image_result)}, 前缀: {str(image_result)[:50]}")
-        
-        if isinstance(image_result, str) and (image_result.startswith("base64://") or image_result.startswith("file://")):
-            # 尝试发送图片
-            image_msg = MessageSegment.image(image_result)
-            print(f"📤 发送测试图片消息...")
-            result = await bot.send(event, image_msg)
-            print(f"✅ 测试图片发送结果: {result}")
-            
-            # 清理临时文件
-            if image_result.startswith("file://"):
-                import os
-                temp_path = image_result.replace("file://", "")
-                try:
-                    if os.path.exists(temp_path):
-                        os.unlink(temp_path)
-                        print(f"🗑️ 已清理测试临时文件")
-                except:
-                    pass
-                    
-        else:
-            # 发送文字说明图片生成失败
-            await bot.send(event, f"❌ 图片生成失败，结果: {image_result}")
+    # 图片功能已禁用
+    await bot.send(event, "🧪 图片功能已禁用，直接发送测试消息")
+    return
     
-    except Exception as e:
-        print(f"❌ 测试图片发送失败: {e}")
-        import traceback
-        traceback.print_exc()
-        await bot.send(event, f"❌ 测试失败: {str(e)}")
+    # 以下代码已禁用
+    if False:
+        print(f"📊 图片字节大小: {len(image_bytes)} bytes")
+        
+        # 尝试多种发送方式
+        success = False
+        
+        # 方式1: 字节数据
+        try:
+            print(f"📤 测试方式1: 字节数据发送...")
+            image_msg = MessageSegment.image(image_bytes)
+            result = await bot.send(event, image_msg)
+            print(f"✅ 字节数据发送成功: {result}")
+            success = True
+        except Exception as e:
+            print(f"❌ 字节数据发送失败: {e}")
+        
+        # 方式2: BytesIO
+        if not success:
+            try:
+                from io import BytesIO
+                print(f"📤 测试方式2: BytesIO发送...")
+                bio = BytesIO(image_bytes)
+                image_msg = MessageSegment.image(bio)
+                result = await bot.send(event, image_msg)
+                print(f"✅ BytesIO发送成功: {result}")
+                success = True
+            except Exception as e:
+                print(f"❌ BytesIO发送失败: {e}")
+        
+        # 方式3: Base64
+        if not success:
+            try:
+                import base64
+                print(f"📤 测试方式3: Base64发送...")
+                base64_str = base64.b64encode(image_bytes).decode('utf-8')
+                image_msg = MessageSegment.image(f"base64://{base64_str}")
+                result = await bot.send(event, image_msg)
+                print(f"✅ Base64发送成功: {result}")
+                success = True
+            except Exception as e:
+                print(f"❌ Base64发送失败: {e}")
+        
+        if not success:
+            # 图片功能已禁用
+            pass
+    else:
+        # 图片功能已禁用
+        pass
 
 # 测试普通消息发送命令
 test_text_cmd = on_alconna(
@@ -69,21 +88,16 @@ test_text_cmd = on_alconna(
 )
 
 @test_text_cmd.handle()
+@handle_command_errors("测试文字")
 async def handle_test_text(bot: Bot, event: Event):
     """处理测试普通消息发送命令"""
     user_id = str(event.get_user_id())
     print(f"🧪 开始测试文字发送给用户: {user_id}")
     
-    try:
-        test_message = "🧪 这是一个测试消息\n用于验证普通文字消息发送功能"
-        print(f"📝 发送测试文字消息...")
-        result = await bot.send(event, test_message)
-        print(f"✅ 测试文字发送结果: {result}")
-        
-    except Exception as e:
-        print(f"❌ 测试文字发送失败: {e}")
-        import traceback
-        traceback.print_exc()
+    test_message = "🧪 这是一个测试消息\n用于验证普通文字消息发送功能"
+    print(f"📝 发送测试文字消息...")
+    result = await bot.send(event, test_message)
+    print(f"✅ 测试文字发送结果: {result}")
 
 # 调试信息命令
 debug_info_cmd = on_alconna(
@@ -94,26 +108,21 @@ debug_info_cmd = on_alconna(
 )
 
 @debug_info_cmd.handle()
+@handle_command_errors("调试信息")
 async def handle_debug_info(bot: Bot, event: Event):
     """显示调试信息"""
     user_id = str(event.get_user_id())
-    
-    # 获取图片模式状态
-    from .message_dedup import _user_image_modes
-    is_image_mode = user_id in _user_image_modes
     
     debug_msg = f"""🔍 调试信息
 
 👤 用户ID: {user_id}
 📱 事件类型: {type(event).__name__}
-🖼️ 图片模式: {'✅ 启用' if is_image_mode else '❌ 禁用'}
 🤖 Bot类型: {type(bot).__name__}
 
 🧪 测试命令:
-• 测试图片 - 测试图片发送
 • 测试文字 - 测试文字发送
 • 调试信息 - 显示此信息
 
-📊 图片模式用户: {len(_user_image_modes)} 个"""
+📝 当前模式: 文字模式（图片功能已禁用）"""
     
-    await bot.send(event, debug_msg)
+    await send_message(bot, event, debug_msg)

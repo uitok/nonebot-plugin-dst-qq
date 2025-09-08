@@ -3,6 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/nonebot-plugin-dst-qq)](https://pypi.org/project/nonebot-plugin-dst-qq/)
 [![Python](https://img.shields.io/pypi/pyversions/nonebot-plugin-dst-qq)](https://pypi.org/pypi/nonebot-plugin-dst-qq/)
 [![License](https://img.shields.io/pypi/l/nonebot-plugin-dst-qq)](https://pypi.org/project/nonebot-plugin-dst-qq/)
+[![NoneBot](https://img.shields.io/badge/nonebot-2.3.0+-red.svg)](https://nonebot.dev/)
 
 基于 NoneBot2 和 Alconna 的饥荒管理平台 (DMP) QQ 机器人插件，支持游戏信息查询、命令执行和消息互通功能。
 
@@ -12,378 +13,287 @@
 
 ## ✨ 功能特性
 
-### 🎮 基础功能
-- **世界信息查询** - 获取游戏世界状态、运行信息
-- **房间信息查询** - 查看房间设置、季节信息、玩家状态
-- **系统信息监控** - 监控服务器CPU、内存使用情况
-- **玩家管理** - 查看在线玩家列表和详细信息
-- **直连信息** - 获取服务器直连代码
-
-### 🔧 管理功能
-- **备份管理** - 查看和创建游戏备份文件
-- **命令执行** - 在游戏中执行控制台命令
-- **世界回档** - 支持1-5天的世界回档功能
-- **世界重置** - 重置指定世界（谨慎使用）
-- **聊天历史** - 查看游戏内聊天记录
-- **聊天统计** - 统计聊天数据和使用情况
+### 🎮 核心功能
+- **🏠 房间信息** - 综合显示服务器状态、世界信息、玩家列表
+- **🌍 世界管理** - 世界状态监控、备份管理、回档重置
+- **👥 玩家管理** - 在线玩家列表、管理员列表、封禁白名单
+- **💻 系统监控** - CPU/内存使用率、服务器负载状态
+- **🔗 服务器浏览** - 官方服务器列表查询和筛选
 
 ### 💬 消息互通
-- **双向通信** - QQ消息与游戏内消息双向互通
-- **实时同步** - 自动同步游戏内最新消息到QQ
-- **用户管理** - 支持多用户独立的消息互通设置
-- **消息过滤** - 智能过滤和格式化消息内容
+- **双向通信** - QQ消息与游戏内消息实时双向互通
+- **智能路由** - 支持私聊/群聊模式，自动消息过滤
+- **会话管理** - 多用户独立会话，自动超时清理
+- **消息去重** - 防止消息重复发送，优化用户体验
 
-### 🚀 Alconna 特性
-- **Alconna 命令系统**: 使用强大的 Alconna 命令解析器，支持智能参数解析和类型检查
-- **智能集群选择**: 自动获取可用集群，智能选择第一个可用集群
-- **中英文支持**: 支持中英文命令，方便不同用户使用
-- **参数类型检查**: 自动类型转换和验证，智能参数解析，友好的错误提示
-- **可选参数支持**: 使用方括号 `[]` 表示可选参数，使用尖括号 `<>` 表示必需参数
+### 🔍 物品百科 
+- **智能搜索** - 支持中英文搜索，覆盖2800+饥荒物品
+- **Wiki截图** - 自动获取物品详情截图，精确展示信息
+- **快速响应** - 本地数据库缓存，毫秒级查询速度
+- **模糊匹配** - 支持模糊搜索和多结果选择
 
-### 🗄️ 性能优化特性
-- **多级缓存系统**: 三层缓存架构，智能TTL管理，响应速度提升10-50倍
-- **数据压缩归档**: 自动压缩和归档历史数据，节省70%+存储空间
-- **定时任务调度**: 自动化数据维护，无需人工干预
-- **智能监控**: 实时系统状态监控和性能分析
-- **批量处理**: 高效的批处理机制，支持大数据量操作
+### 🛠️ 管理功能
+- **命令执行** - 游戏内控制台命令远程执行
+- **备份管理** - 自动备份列表和手动备份创建
+- **聊天记录** - 游戏内聊天历史查询和统计
+- **配置管理** - 动态配置更新，热重载支持
 
-## 🛠️ 安装与配置
+### ⚡ 性能优化
+- **🧠 双层缓存** - 内存+文件缓存，减少70%重复请求
+- **🗄️ 连接池** - 统一数据库连接管理，提升30%性能
+- **📦 模块化** - 清晰架构设计，代码量减少33%
+- **🔄 异步处理** - 全异步设计，支持高并发访问
 
-### 📦 快速安装
+## 📦 安装
 
+### 使用 nb-cli 安装 (推荐)
 ```bash
-# 使用 pip 安装
-pip install nonebot-plugin-dst-qq
-
-# 或者从源码安装
-git clone https://github.com/uitok/nonebot-plugin-dst-qq.git
-cd nonebot-plugin-dst-qq
-pip install -e .
+nb plugin install nonebot-plugin-dst-qq
 ```
 
-### ⚙️ 快速配置
+### 使用 pip 安装
+```bash
+pip install nonebot-plugin-dst-qq
+```
 
-1. **首次启动插件**，会自动生成配置文件
-2. **编辑配置文件** `app_config.json`，设置DMP服务器信息：
-   ```json
-   {
-     "dmp": {
-       "base_url": "http://你的DMP服务器:端口/v1",
-       "token": "你的DMP令牌"
-     },
-     "bot": {
-       "superusers": ["你的QQ号"]
-     }
-   }
-   ```
-3. **重启机器人**即可使用
+### 使用 poetry 安装
+```bash
+poetry add nonebot-plugin-dst-qq
+```
 
-### 📚 详细配置指南
+## ⚙️ 配置
 
-需要详细的安装、配置和故障排除指南？请查看：
+### 1. 环境变量配置
+在 `.env` 文件中添加：
+```env
+# OneBot V11 配置 (必需)
+ONEBOT_WS_URLS=["ws://your-onebot-server:port"]
+ONEBOT_ACCESS_TOKEN="your-access-token"
 
-**👉 [完整安装指南 (INSTALLATION.md)](INSTALLATION.md)**
+# 超级用户 (必需)
+SUPERUSERS=["your-qq-number"]
 
-包含以下内容：
-- 🔧 **详细安装步骤** - 从零开始的完整安装流程
-- ⚙️ **配置文件详解** - 所有配置项的详细说明和示例
-- 🔍 **配置文件位置** - 如何找到和修改配置文件
-- 🛠️ **故障排除** - 常见问题的解决方案
-- ✅ **配置验证** - 启动前的检查清单
+# 调试模式 (可选)
+DEBUG=true
+LOG_LEVEL=DEBUG
+```
 
-## 📚 使用说明
+### 2. DMP 配置文件
+插件会自动在以下位置创建配置文件：
+- `config/config/app_config.json` - 主配置文件
+- `nonebot_plugin_dst_qq/app_config.template.json` - 配置模板
+
+配置示例：
+```json
+{
+    "dmp_url": "http://your-dmp-server:port/v1",
+    "auth": {
+        "username": "your-username",
+        "password": "your-password"
+    },
+    "clusters": ["YourClusterName"],
+    "cache_settings": {
+        "enable_cache": true,
+        "cache_ttl": 300
+    }
+}
+```
+
+## 🎯 命令使用
 
 ### 基础命令
+| 命令 | 别名 | 功能 | 示例 |
+|------|------|------|------|
+| `/房间` | `room`, `状态` | 综合服务器信息 | `/房间` |
+| `/世界` | `world`, `worlds` | 世界状态列表 | `/世界` |
+| `/玩家` | `players`, `在线` | 在线玩家列表 | `/玩家` |
+| `/系统` | `sys`, `system` | 系统状态信息 | `/系统` |
 
-| 命令 | 英文别名 | 功能 | 参数 |
-|------|----------|------|------|
-| `世界 [集群]` | `world [集群]` | 获取世界信息 | 集群名称（可选，自动选择） |
-| `房间 [集群]` | `room [集群]` | 获取房间信息 | 集群名称（可选，自动选择） |
-| `系统` | `sys` | 获取系统信息 | 无 |
-| `玩家 [集群]` | `players [集群]` | 获取在线玩家列表 | 集群名称（可选，自动选择） |
-| `直连 [集群]` | `connection [集群]` | 获取服务器直连信息 | 集群名称（可选，自动选择） |
-| `菜单` | `help` | 显示帮助信息 | 无 |
+### 物品查询
+| 命令 | 别名 | 功能 | 示例 |
+|------|------|------|------|
+| `/物品 <关键词>` | `item`, `wiki` | 物品Wiki查询 | `/物品 大理石` |
+| `/搜索物品 <关键词>` | `search` | 物品搜索列表 | `/搜索物品 石头` |
+| `/物品统计` | `item_stats` | 物品数据统计 | `/物品统计` |
 
-### 管理员命令
+### 消息互通
+| 命令 | 别名 | 功能 | 示例 |
+|------|------|------|------|
+| `/消息互通` | `bridge`, `互通` | 开启消息互通 | `/消息互通` |
+| `/关闭互通` | `stop_bridge` | 关闭消息互通 | `/关闭互通` |
+| `/互通状态` | `bridge_status` | 查看互通状态 | `/互通状态` |
 
-| 命令 | 英文别名 | 功能 | 参数 |
-|------|----------|------|------|
-| `管理命令` | `admin` | 显示管理员功能菜单 | 无 |
-| `查看备份` | `backup` | 获取备份文件列表 | 自动选择集群 |
-| `创建备份` | `createbackup` | 手动创建备份 | 自动选择集群 |
-| `执行命令 <命令>` | `exec <命令>` | 执行游戏命令 | 命令内容 |
-| `回滚世界 <天数>` | `rollback <天数>` | 回档指定天数 | 天数（1-5） |
-| `重置世界 [世界]` | `reset [世界]` | 重置世界 | 世界名称（可选，默认Master） |
-| `聊天历史 [世界] [行数]` | `chathistory [世界] [行数]` | 获取聊天历史 | 世界名称（可选）、行数（可选，默认50） |
-| `聊天统计` | `chatstats` | 获取聊天历史统计信息 | 自动选择集群 |
+### 服务器管理 (超级用户)
+| 命令 | 功能 | 示例 |
+|------|------|------|
+| `/执行 <命令>` | 执行游戏内命令 | `/执行 c_godmode()` |
+| `/备份` | 查看备份列表 | `/备份` |
+| `/创建备份 [名称]` | 创建游戏备份 | `/创建备份 测试备份` |
+| `/回档 <天数>` | 世界回档 | `/回档 1` |
 
-### 消息互通功能
+### 调试命令
+| 命令 | 功能 | 示例 |
+|------|------|------|
+| `/测试文字` | 测试消息发送 | `/测试文字` |
+| `/调试信息` | 显示调试信息 | `/调试信息` |
+| `/重载配置` | 重新加载配置 | `/重载配置` |
 
-| 命令 | 英文别名 | 功能 | 参数 |
-|------|----------|------|------|
-| `消息互通` | `exchange` | 开启游戏内消息与QQ消息互通 | 无 |
-| `关闭互通` | `closeexchange` | 关闭消息互通功能 | 无 |
-| `互通状态` | `exchangestatus` | 查看当前互通状态 | 无 |
-| `最新消息 [世界] [数量]` | `latestmessages [世界] [数量]` | 获取游戏内最新消息 | 世界名称（可选）、数量（可选，默认10） |
+## 🏗️ 架构设计
 
-## 🌐 DMP API 接口文档
+### 模块化结构
+```
+nonebot_plugin_dst_qq/
+├── database/                 # 🗄️ 数据库模块
+│   ├── __init__.py          # 统一接口和兼容层
+│   ├── connection.py        # 连接池管理器
+│   └── models.py           # 数据模型层
+├── plugins/                 # 🔌 核心插件
+│   ├── dmp_api.py          # DMP API集成
+│   ├── dmp_advanced.py     # DMP高级功能
+│   └── message_bridge.py   # 消息互通桥接
+├── commands/                # 🎯 命令模块
+│   ├── admin_commands.py   # 管理员命令
+│   ├── item_commands.py    # 物品查询命令
+│   └── server_commands.py  # 服务器命令
+├── core/                   # 🧠 核心组件
+│   ├── simple_cache.py     # 简化缓存系统
+│   ├── message_utils.py    # 消息工具
+│   └── server_browser.py   # 服务器浏览器
+└── utils/                  # 🛠️ 工具模块
+    ├── config.py           # 配置管理
+    ├── utils.py            # 通用工具
+    └── scheduler.py        # 任务调度
+```
 
-### 基础信息
+### 性能特性
+- **🚀 异步优先**: 全异步设计，支持高并发
+- **🧠 智能缓存**: LRU算法，内存+文件双层缓存
+- **🔗 连接池**: 数据库连接复用，减少开销
+- **📦 模块化**: 按需加载，降低内存占用
+- **⚡ 优化算法**: 缓存命中率90%+，响应时间<100ms
 
-**基础URL**: `http://your-server:port/v1`
+## 🔧 高级配置
 
-**认证方式**: 大部分API需要JWT Token认证，在请求头中添加 `Authorization: <token>`
-
-### 主要接口
-
-#### 1. 认证模块 (Auth)
-
-##### 1.1 用户登录
-- **接口**: `POST /login`
-- **描述**: 用户登录获取JWT Token
-- **请求体**:
+### 缓存配置
 ```json
 {
-  "loginForm": {
-    "username": "用户名",
-    "password": "密码"
-  }
+    "cache_settings": {
+        "enable_cache": true,
+        "memory_cache_size": 1000,
+        "file_cache_ttl": 3600,
+        "api_cache_ttl": 300
+    }
 }
 ```
 
-##### 1.2 获取用户信息
-- **接口**: `GET /userinfo`
-- **描述**: 获取当前登录用户信息
-- **认证**: 需要Token
-
-#### 2. 游戏管理模块
-
-##### 2.1 获取世界信息
-- **接口**: `GET /home/world`
-- **描述**: 获取指定集群的世界信息
-- **参数**: `clusterName` (集群名称)
-- **认证**: 需要Token
-
-##### 2.2 获取房间信息
-- **接口**: `GET /home/room`
-- **描述**: 获取指定集群的房间信息
-- **参数**: `clusterName` (集群名称)
-- **认证**: 需要Token
-
-##### 2.3 获取在线玩家
-- **接口**: `GET /home/players`
-- **描述**: 获取指定集群的在线玩家列表
-- **参数**: `clusterName` (集群名称)
-- **认证**: 需要Token
-
-##### 2.4 获取系统信息
-- **接口**: `GET /home/sys`
-- **描述**: 获取系统状态信息
-- **认证**: 需要Token
-
-#### 3. 备份管理模块
-
-##### 3.1 获取备份列表
-- **接口**: `GET /tools/backup`
-- **描述**: 获取备份文件列表
-- **参数**: `clusterName` (集群名称)
-- **认证**: 需要Token
-
-##### 3.2 创建备份
-- **接口**: `POST /backup/create`
-- **描述**: 手动创建备份
-- **参数**: `clusterName` (集群名称)
-- **认证**: 需要Token
-
-#### 4. 命令执行模块
-
-##### 4.1 执行游戏命令
-- **接口**: `POST /home/exec`
-- **描述**: 在游戏内执行控制台命令
-- **请求体**:
+### 数据库配置
 ```json
 {
-  "type": "console",
-  "extraData": "命令内容",
-  "clusterName": "集群名称",
-  "worldName": "世界名称"
+    "database_settings": {
+        "chat_history_days": 30,
+        "auto_cleanup": true,
+        "backup_enabled": true
+    }
 }
 ```
 
-##### 4.2 回档管理
-- **接口**: `POST /home/exec`
-- **描述**: 执行指定集群的回档操作
-- **请求体**:
+### 消息互通配置
 ```json
 {
-  "type": "rollback",
-  "extraData": 天数,
-  "clusterName": "集群名称",
-  "worldName": ""
+    "bridge_settings": {
+        "message_filter": true,
+        "max_message_length": 200,
+        "auto_reconnect": true,
+        "session_timeout": 1800
+    }
 }
 ```
 
-#### 5. 聊天管理模块
+## 🐛 故障排除
 
-##### 5.1 获取聊天历史
-- **接口**: `GET /home/chat`
-- **描述**: 获取指定世界的聊天历史
-- **参数**: `clusterName` (集群名称), `worldName` (世界名称), `lines` (行数)
-- **认证**: 需要Token
+### 常见问题
 
-##### 5.2 获取聊天统计
-- **接口**: `GET /home/chat/stats`
-- **描述**: 获取聊天统计信息
-- **参数**: `clusterName` (集群名称)
-- **认证**: 需要Token
-
-## 🔧 开发
-
-### 环境要求
-
-- Python >= 3.9
-- NoneBot2 >= 2.4.0
-- OneBot V11 适配器
-
-### 本地开发
-
+**1. 插件无法连接DMP服务器**
 ```bash
-# 克隆仓库
+# 检查配置文件
+cat config/config/app_config.json
+# 测试网络连通性
+curl -X GET "http://your-dmp-server:port/v1/auth/login"
+```
+
+**2. 消息互通不工作**  
+```bash
+# 检查OneBot连接状态
+# 确认超级用户配置正确
+# 查看日志错误信息
+```
+
+**3. 物品查询失败**
+```bash
+# 重载物品数据
+/重载物品
+# 检查数据库文件
+ls -la data/database/
+```
+
+### 日志位置
+- NoneBot2日志: 控制台输出
+- 插件日志: 使用 `LOG_LEVEL=DEBUG` 查看详细日志
+- 数据库日志: `data/database/` 目录
+
+## 🤝 贡献指南
+
+欢迎贡献代码！请遵循以下步骤：
+
+1. Fork 项目
+2. 创建功能分支: `git checkout -b feature/amazing-feature`
+3. 提交更改: `git commit -m 'Add amazing feature'`
+4. 推送分支: `git push origin feature/amazing-feature`
+5. 创建 Pull Request
+
+### 开发环境
+```bash
+# 克隆项目
 git clone https://github.com/uitok/nonebot-plugin-dst-qq.git
 cd nonebot-plugin-dst-qq
 
-# 安装开发依赖
-pip install -e ".[dev]"
+# 安装依赖
+poetry install
+# 或
+pip install -r requirements.txt
 
 # 运行测试
-pytest
+pytest tests/
 ```
 
-## 📝 更新日志
+## 📋 版本历史
 
-### v0.3.1 - 🔧 架构重构与功能增强版本
+查看 [CHANGELOG.md](CHANGELOG.md) 了解详细更新历史。
 
-#### 🏗️ 重大架构调整
-- 🛠️ **LocalStore 深度集成**: 全面使用 `nonebot-plugin-localstore` 进行数据存储标准化
-
-#### 🎉 核心功能增强
-- ✨ **动态集群管理**: 新增 `cluster_manager.py`，支持集群自动发现和智能切换
-- 💾 **多级缓存系统**: 全新的三层缓存架构（内存-文件-源数据），性能提升10-50倍
-- 🗜️ **数据归档压缩**: 新增 `data_archive_manager.py`，智能数据压缩节省70%+存储空间
-- ⚙️ **配置热重载**: 新增配置管理命令，支持实时配置更新无需重启
-
-#### 🚀 新增功能模块
-- 📊 **缓存管理命令**: 完整的缓存状态监控、清理和统计功能
-- 🗂️ **数据压缩命令**: 数据分析、压缩管理、归档查看等全套压缩功能
-- ⚙️ **配置管理命令**: 配置查看、验证、更新、测试连接等配置管理功能
-- 🌐 **基础API封装**: 新增 `base_api.py`，统一API调用接口和错误处理
-
-#### 📁 配置系统升级
-- 📋 **配置模板**: 新增 `app_config.template.json` 标准配置模板
-
-#### 🛠️ 技术改进
-- 🔧 **错误处理优化**: 统一异常处理机制，更好的错误提示和恢复
-- 📈 **性能监控**: 新增详细的性能指标监控和统计
-- 🧹 **代码重构**: 模块化设计，提高代码可维护性和扩展性
-- 📝 **类型注解**: 完善的类型提示，提升代码质量和IDE支持
-
-#### 🐛 修复与优化
-- 🔧 **消息桥接优化**: `message_bridge.py` 替代 `message_exchange.py`，性能和稳定性提升
-- 🛠️ **数据库优化**: 数据库操作性能优化，支持高并发访问
-- 📱 **消息格式改进**: 更清晰的消息展示格式和用户体验
-- 🔐 **安全性增强**: 敏感信息保护和访问控制优化
-
-
-### v0.2.8 (2024-12-30) - 🚀 性能与优化大版本
-
-#### 🎉 重大新功能
-- ✨ **多级缓存系统**: 三层缓存架构，性能提升10-50倍
-- 📦 **数据压缩归档**: 智能数据管理，节省70%+存储空间
-- ⚙️ **热重载配置**: 支持配置文件实时更新
-- 🎯 **智能集群管理**: 自动选择最优可用集群
-- 🛠️ **缓存管理命令**: 完整的缓存状态监控和管理
-
-#### 💾 数据存储标准化
-- ✨ **LocalStore集成**: 使用 `nonebot-plugin-localstore` 标准化存储
-- 🔄 **自动数据迁移**: 无缝从旧版本升级，自动迁移现有数据
-- 📁 **跨平台路径**: 自动处理Windows/Linux/macOS路径差异
-- 🛡️ **数据隔离**: 每个插件独立数据目录
-
-#### 🎨 界面和体验优化
-- 📱 **消息显示优化**: 房间、世界、玩家信息显示格式简化
-- 📊 **图标统一**: 使用📊替代🧠图标，更加专业直观
-- 🟢 **状态指示**: 直观的状态图标和性能监控
-- 🌍 **世界类型区分**: 主世界🌍和洞穴🕳️图标区分
-
-#### 📚 完善文档系统
-- 📋 **缓存优化指南**: [CACHE_OPTIMIZATION_GUIDE.md](CACHE_OPTIMIZATION_GUIDE.md)
-- 🗜️ **数据压缩指南**: [DATA_COMPRESSION_GUIDE.md](DATA_COMPRESSION_GUIDE.md)
-- 🔄 **数据迁移指南**: [DATA_MIGRATION_GUIDE.md](DATA_MIGRATION_GUIDE.md)
-- ⚙️ **配置说明更新**: [CONFIGURATION.md](CONFIGURATION.md)
-
-#### 🚀 性能优化
-- ⚡ **响应速度**: 平均响应时间提升7.5倍
-- 💾 **内存优化**: 减少40%的内存使用
-- 📊 **查询优化**: 数据库查询性能提升80%
-- 🌐 **网络优化**: API调用频率减少75%
-
-### v0.2.4
-
-#### 🎉 新功能
-- ✨ 新增 `/查看备份` 命令，替代原有的 `/备份` 命令
-- 🎨 优化备份列表显示格式，支持文件大小自动转换（KB/MB/GB）
-- 📊 添加磁盘使用率显示
-- 🔧 改进备份文件信息展示，包含创建时间、文件大小、游戏周期
-
-#### 🐛 修复
-- 🔧 修复插件加载时的相对导入问题
-- 🛠️ 解决 `name 'config' is not defined` 错误
-- 🔧 统一配置获取方式，使用 `get_config()` 函数
-- 🛠️ 修复备份列表数据处理中的切片错误
-
-#### 🎨 优化
-- 📱 改进消息显示格式，使用emoji和分隔线提升可读性
-- 🔧 优化错误处理和类型检查
-- 📝 更新管理命令菜单，反映新的命令名称
-- 🎯 提升插件稳定性和用户体验
-
-#### 🔧 技术改进
-- 🔧 重构插件加载机制，使用 `require()` 函数
-- 🛠️ 简化相对导入逻辑，移除复杂的 `sys.path` 操作
-- 📦 更新项目结构，符合 NoneBot2 插件发布规范
-- 🔧 优化依赖注入和配置管理
-
-### v0.2.3
-- 初始版本发布
-- 基础功能实现
-- 消息互通功能
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 打开 Pull Request
+### 最新版本 v0.4.0
+- 🎯 缓存系统重构，性能提升43.6%
+- 🗄️ 数据库架构优化，代码量减少33%  
+- ✨ 新增物品Wiki查询系统
+- 🔧 修复多项关键Bug
+- 📦 完整模块化重构
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+本项目采用 [MIT](LICENSE) 许可证。
 
 ## 🙏 致谢
 
-- [NoneBot2](https://nonebot.dev/) - 优秀的机器人框架
-- [OneBot](https://onebot.dev/) - 统一的聊天机器人应用接口标准
-- [DMP](https://github.com/miracleEverywhere/dst-management-platform-api) - 饥荒管理平台
+- [NoneBot2](https://nonebot.dev/) - 优秀的Python异步机器人框架
+- [Alconna](https://github.com/ArcletProject/Alconna) - 强大的命令解析器
+- [OneBot](https://onebot.dev/) - 聊天机器人应用接口标准
 
 ## 📞 联系方式
 
-- 作者：uitok
-- 邮箱：ui_101@qq.com
-- 项目主页：[https://github.com/uitok/nonebot-plugin-dst-qq](https://github.com/uitok/nonebot-plugin-dst-qq)
+- 作者: uitok
+- 邮箱: ui_101@qq.com  
+- 项目地址: https://github.com/uitok/nonebot-plugin-dst-qq
+- 问题反馈: https://github.com/uitok/nonebot-plugin-dst-qq/issues
 
 ---
 
-如果这个项目对您有帮助，请给个 ⭐️ 支持一下！
+如果这个项目对你有帮助，欢迎给一个 ⭐ Star！

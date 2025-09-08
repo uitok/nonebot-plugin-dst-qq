@@ -13,12 +13,18 @@ __plugin_meta__ = PluginMetadata(
 │        🌟 基础功能          │  
 ├─────────────────────────────┤
 │ /菜单     显示主菜单        │
-│ /世界     获取世界信息      │
-│ /房间     获取房间信息      │
-│ /系统     获取系统信息      │
-│ /玩家     获取玩家列表      │
+│ /房间     服务器综合信息    │
 │ /直连     获取直连信息      │
 │ /集群状态 查看集群状态      │
+└─────────────────────────────┘
+
+┌─────────────────────────────┐
+│        📖 物品查询          │
+├─────────────────────────────┤
+│ /物品     查询物品Wiki      │
+│ /搜索物品 搜索物品列表      │
+│ /物品统计 查看物品统计      │
+│ /重载物品 重载物品数据      │
 └─────────────────────────────┘
 
 ┌─────────────────────────────┐
@@ -45,6 +51,7 @@ __plugin_meta__ = PluginMetadata(
 • 📦 数据压缩归档 - 节省70%+存储空间
 • 🎯 智能集群管理 - 自动选择最优集群
 • 💬 实时消息互通 - QQ与游戏双向通信
+• 📖 物品Wiki查询 - 支持2800+物品查询
 • ⚙️ 热重载配置 - 动态配置更新
 • 🌐 中英文命令 - 双语命令支持
 • 📱 优化界面显示 - 简洁美观的信息展示
@@ -74,182 +81,88 @@ __plugin_meta__ = PluginMetadata(
 # 使用新的配置管理器
 from .config import get_config_manager, get_config
 
-# 导入子插件模块，确保Alconna命令被正确注册
-try:
-    # 逐个导入子插件模块以确定问题所在
-    print("🔍 开始导入子插件模块...")
-    
-    try:
-        from .plugins import dmp_api
-        print("✅ dmp_api 导入成功")
-    except Exception as e:
-        print(f"❌ dmp_api 导入失败: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    try:
-        from .plugins import dmp_advanced
-        print("✅ dmp_advanced 导入成功")
-    except Exception as e:
-        print(f"❌ dmp_advanced 导入失败: {e}")
-    
-    try:
-        from .plugins import message_bridge
-        print("✅ message_bridge 导入成功")
-    except Exception as e:
-        print(f"❌ message_bridge 导入失败: {e}")
-    
-    # 导入缓存管理命令
-    from . import cache_commands
-    print("✅ cache_commands 导入成功")
-    
-    # 导入数据压缩管理命令
-    from . import compression_commands
-    print("✅ compression_commands 导入成功")
-    
-    # 导入配置管理命令
-    from . import config_commands
-    print("✅ config_commands 导入成功")
-    
-    # 导入集群管理命令
-    from . import cluster_commands
-    print("✅ cluster_commands 导入成功")
-    
-    # 导入输出模式切换命令
-    from . import output_mode_commands
-    print("✅ output_mode_commands 导入成功")
-    
-    # 导入调试命令
-    from . import debug_commands
-    print("✅ debug_commands 导入成功")
-    
-    print("✅ 所有子插件模块加载成功")
-except Exception as e:
-    print(f"⚠️ 子插件加载失败: {e}")
-    import traceback
-    traceback.print_exc()
+# 导入子插件模块
+print("🔍 开始导入子插件模块...")
 
-# 插件启动时的初始化
-@nonebot.get_driver().on_startup
-async def startup():
-    """插件启动时初始化"""
-    print("🚀 DMP 饥荒管理平台机器人插件启动中...")
+# 核心功能模块
+from .plugins import dmp_api, dmp_advanced, message_bridge
+print("✅ 核心功能模块导入成功")
+
+# 命令模块
+from . import admin_commands, cluster_commands, debug_commands, item_commands, server_commands
+print("✅ 命令模块导入成功")
+
+print("✅ 所有子插件模块加载成功")
+
+async def init_components():
+    """初始化各组件"""
+    components = []
+    
     try:
-        # 执行配置迁移（如果需要）
-        try:
-            from .migrate_config import auto_migrate_if_needed
-            auto_migrate_if_needed()
-        except Exception as e:
-            print(f"⚠️ 配置迁移失败: {e}")
-        
-        # 初始化配置
+        # 配置系统
         config_manager = get_config_manager()
         config = config_manager.get_config()
-        print(f"✅ 配置加载成功: DMP服务器 {config.dmp.base_url}")
+        print(f"✅ 配置加载: {config.dmp.base_url}")
         
-        # 测试DMP连接
+        # DMP连接测试
         if await config_manager.test_dmp_connection():
-            print("✅ DMP服务器连接测试成功")
-        else:
-            print("⚠️ DMP服务器连接测试失败，请检查配置")
+            print("✅ DMP服务器连接正常")
         
-        # 初始化集群管理器 
-        try:
-            from .cache_manager import cache_manager
-            from .cluster_manager import init_cluster_manager
-            from .plugins.dmp_api import dmp_api
-            
-            cluster_manager = init_cluster_manager(dmp_api, cache_manager)
-            # 预热集群列表缓存
-            clusters = await cluster_manager.get_available_clusters()
-            if clusters:
-                default_cluster = await cluster_manager.get_default_cluster()
-                print(f"✅ 集群管理器已启动，发现 {len(clusters)} 个集群")
-                print(f"🎯 默认集群: {default_cluster}")
-            else:
-                print("⚠️ 未能获取集群列表，可能是网络或权限问题")
-        except Exception as e:
-            print(f"⚠️ 集群管理器初始化失败: {e}")
+        # 集群管理器
+        from .simple_cache import get_cache
+        from .cluster_manager import init_cluster_manager
+        from .plugins.dmp_api import dmp_api
         
-        # 启动消息互通服务（如果启用）
-        try:
-            # 使用新的消息互通模块
-            from .plugins.message_bridge import start_message_bridge
-            await start_message_bridge()
-            print("✅ 消息互通服务启动成功")
-        except Exception as e:
-            print(f"⚠️ 消息互通服务启动失败: {e}")
-            
-        # 初始化缓存系统
-        try:
-            from .cache_manager import cache_manager
-            print(f"✅ 多级缓存系统已启动")
-            print(f"📁 缓存存储路径: {cache_manager.cache_dir}")
-        except Exception as e:
-            print(f"⚠️ 缓存系统初始化失败: {e}")
-            
-        # 初始化数据压缩系统
-        try:
-            from .data_archive_manager import archive_manager
-            from .database import chat_db
-            await chat_db.init_database()  # 确保归档表已创建
-            print(f"✅ 数据压缩系统已启动")
-            print(f"📦 归档存储路径: {archive_manager.archive_dir}")
-        except Exception as e:
-            print(f"⚠️ 数据压缩系统初始化失败: {e}")
-            
-        # 初始化定时任务调度器
-        try:
-            from .scheduler import init_maintenance_scheduler
-            await init_maintenance_scheduler()
-            print(f"✅ 定时任务调度器已启动")
-        except Exception as e:
-            print(f"⚠️ 定时任务调度器初始化失败: {e}")
-            
+        cluster_manager = init_cluster_manager(dmp_api, get_cache())
+        clusters = await cluster_manager.get_available_clusters()
+        if clusters:
+            print(f"✅ 集群管理器启动 ({len(clusters)} 个集群)")
+        
+        # 核心服务
+        from .plugins.message_bridge import start_message_bridge
+        await start_message_bridge()
+        print("✅ 消息互通服务启动")
+        
+        from .database import item_wiki_manager, chat_history_db
+        await item_wiki_manager.init_database()
+        print("✅ 物品Wiki系统启动")
+        
+        await chat_history_db.init_database()
+        print("✅ 数据库系统启动")
+        
+        from .scheduler import init_maintenance_scheduler
+        await init_maintenance_scheduler()
+        print("✅ 定时任务调度器启动")
+        
     except Exception as e:
-        print(f"❌ 插件初始化失败: {e}")
+        print(f"⚠️ 组件初始化异常: {e}")
 
-# 插件关闭时的清理
+# 插件生命周期
+@nonebot.get_driver().on_startup
+async def startup():
+    """插件启动初始化"""
+    print("🚀 DMP饥荒管理平台插件启动中...")
+    await init_components()
+    print("✅ 插件启动完成")
+
 @nonebot.get_driver().on_shutdown
 async def shutdown():
-    """插件关闭时清理"""
-    print("🔄 DMP 饥荒管理平台机器人插件正在关闭...")
-    try:
-        # 停止消息互通服务
-        try:
-            # 使用新的消息互通模块
-            from .plugins.message_bridge import stop_message_bridge
-            await stop_message_bridge()
-            print("✅ 消息互通服务停止成功")
-        except Exception as e:
-            print(f"⚠️ 停止消息互通服务失败: {e}")
-            
-        # 清理缓存统计
-        try:
-            from .cache_manager import cache_manager
-            final_stats = cache_manager.get_stats()
-            print(f"📊 缓存系统最终统计:")
-            print(f"   总请求: {final_stats['total_requests']}")
-            print(f"   命中率: {final_stats['hit_rate']:.2%}")
-        except Exception as e:
-            print(f"⚠️ 缓存系统清理失败: {e}")
-            
-        # 显示维护调度器统计
-        try:
-            from .scheduler import maintenance_scheduler
-            scheduler_stats = maintenance_scheduler.get_scheduler_stats()
-            if scheduler_stats['maintenance_stats']['total_runs'] > 0:
-                stats = scheduler_stats['maintenance_stats']
-                print(f"🔧 维护调度器统计:")
-                print(f"   总执行: {stats['total_runs']} 次")
-                print(f"   成功率: {(stats['successful_runs']/stats['total_runs']*100):.1f}%")
-                print(f"   处理记录: {stats['total_records_processed']:,} 条")
-                print(f"   节省空间: {stats['total_space_saved_mb']:.2f} MB")
-        except Exception as e:
-            print(f"⚠️ 维护调度器统计失败: {e}")
-            
-    except Exception as e:
-        print(f"❌ 插件关闭清理失败: {e}")
+    """插件关闭清理"""
+    print("🔄 DMP插件正在关闭...")
     
-    print("👋 DMP 饥荒管理平台机器人插件已关闭")
+    try:
+        # 停止消息互通
+        from .plugins.message_bridge import stop_message_bridge
+        await stop_message_bridge()
+        print("✅ 消息互通服务已停止")
+        
+        # 显示缓存统计
+        cache = get_cache()
+        stats = cache.get_stats()
+        print(f"📊 缓存统计: 内存项目 {stats.get('memory_items', 0)}, 命中率 {stats.get('hit_rate', 0):.1%}")
+        
+    except Exception as e:
+        print(f"⚠️ 清理异常: {e}")
+    
+    print("👋 DMP插件已关闭")
 

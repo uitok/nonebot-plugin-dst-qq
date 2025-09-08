@@ -1,105 +1,48 @@
 """
 通用工具函数模块
-
-提供插件中常用的工具函数，包括权限检查、数据处理等功能。
+简化版权限检查和数据处理工具
 """
 
 from typing import Union
+from functools import wraps
+from nonebot import get_driver
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.onebot.v11 import Bot as OneBotV11, PrivateMessageEvent, GroupMessageEvent
-
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, PrivateMessageEvent
 from .config import get_config
 
-
-async def is_superuser(bot: Bot, event: Event) -> bool:
-    """
-    检查用户是否为超级用户
-    
-    Args:
-        bot: Bot实例
-        event: 事件对象
-        
-    Returns:
-        bool: 是否为超级用户
-    """
+async def is_admin(bot: Bot, event: Event) -> bool:
+    """检查用户是否为管理员（超级用户或群管理员）"""
     try:
-        # 获取配置
-        config = get_config()
-        
-        # 获取用户ID
         user_id = str(event.get_user_id())
         
-        # 检查是否在超级用户列表中
-        return user_id in config.bot.superusers
+        # 检查超级用户
+        driver = get_driver()
+        if user_id in driver.config.superusers:
+            return True
         
-    except Exception:
-        # 如果出现任何错误，返回False以确保安全
-        return False
-
-
-async def is_admin_group(event: Event) -> bool:
-    """
-    检查群组是否为管理员群组
-    
-    Args:
-        event: 事件对象
-        
-    Returns:
-        bool: 是否为管理员群组
-    """
-    try:
-        # 只对群消息事件有效
-        if not isinstance(event, GroupMessageEvent):
-            return False
-            
-        config = get_config()
-        group_id = str(event.group_id)
-        
-        # 如果没有设置管理员群组，则所有群组都不是管理员群组
-        if not config.bot.admin_groups:
-            return False
-            
-        return group_id in config.bot.admin_groups
-        
-    except Exception:
-        return False
-
-
-async def is_allowed_group(event: Event) -> bool:
-    """
-    检查群组是否被允许使用
-    
-    Args:
-        event: 事件对象
-        
-    Returns:
-        bool: 是否允许使用
-    """
-    try:
-        # 私聊消息总是允许（如果启用了私聊功能）
-        if isinstance(event, PrivateMessageEvent):
-            config = get_config()
-            return config.bot.enable_private_chat
-            
-        # 群消息检查
+        # 检查群管理员
         if isinstance(event, GroupMessageEvent):
-            config = get_config()
-            
-            # 如果禁用了群聊功能，直接返回False
-            if not config.bot.enable_group_chat:
-                return False
-                
-            # 如果没有设置允许的群组列表，则所有群组都允许
-            if not config.bot.allowed_groups:
-                return True
-                
-            group_id = str(event.group_id)
-            return group_id in config.bot.allowed_groups
-            
-        return False
+            try:
+                config = get_config()
+                group_id = str(event.group_id)
+                if config.bot.admin_groups and group_id in config.bot.admin_groups:
+                    return True
+            except:
+                pass
         
-    except Exception:
         return False
+    except:
+        return False
+
+def require_admin(func):
+    """管理员权限装饰器"""
+    @wraps(func)
+    async def wrapper(bot: Bot, event: Event, *args, **kwargs):
+        if await is_admin(bot, event):
+            return await func(bot, event, *args, **kwargs)
+        else:
+            await bot.send(event, "❌ 权限不足，仅管理员可使用此命令")
+    return wrapper
 
 
 def format_file_size(size_bytes: int) -> str:

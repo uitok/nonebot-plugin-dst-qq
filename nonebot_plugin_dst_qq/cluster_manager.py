@@ -13,15 +13,15 @@ if TYPE_CHECKING:
     from .plugins.dmp_api import DMPAPI
 
 from nonebot import logger
-from .cache_manager import CacheManager
+from .simple_cache import SimpleCache
 
 
 class ClusterManager:
     """动态集群管理器"""
     
-    def __init__(self, dmp_api: "DMPAPI", cache_manager: CacheManager):
+    def __init__(self, dmp_api: "DMPAPI", cache: SimpleCache):
         self.dmp_api = dmp_api
-        self.cache_manager = cache_manager
+        self.cache = cache
         self._clusters_cache_key = "available_clusters"
         self._current_cluster_key = "current_cluster"
         self._cache_ttl = 300  # 5分钟缓存
@@ -39,7 +39,7 @@ class ClusterManager:
         async with self._lock:
             # 尝试从缓存获取
             if not force_refresh:
-                cached_clusters = await self.cache_manager.get("api", self._clusters_cache_key)
+                cached_clusters = await self.cache.get(self._clusters_cache_key)
                 if cached_clusters:
                     logger.debug(f"从缓存获取到 {len(cached_clusters)} 个集群")
                     return cached_clusters
@@ -71,12 +71,10 @@ class ClusterManager:
                             processed_clusters.append(processed_cluster)
                         
                         # 缓存结果
-                        await self.cache_manager.set(
-                            "api",
+                        await self.cache.set(
                             self._clusters_cache_key, 
                             processed_clusters, 
-                            memory_ttl=self._cache_ttl,
-                            file_ttl=self._cache_ttl * 2
+                            self._cache_ttl
                         )
                         
                         logger.info(f"成功获取并缓存了 {len(processed_clusters)} 个集群")
@@ -143,7 +141,7 @@ class ClusterManager:
             "set_at": datetime.now().isoformat()
         }
         
-        await self.cache_manager.set("config", self._current_cluster_key, cluster_info, memory_ttl=0, file_ttl=0)  # 永久缓存
+        await self.cache.set(self._current_cluster_key, cluster_info, 3600 * 24)  # 24小时缓存
         
         # 清理相关缓存，让新集群立即生效
         await self._clear_cluster_related_cache()
@@ -158,7 +156,7 @@ class ClusterManager:
             当前集群名称，如果未设置则返回默认集群
         """
         # 尝试获取用户设置的集群
-        current_cluster_info = await self.cache_manager.get("config", self._current_cluster_key)
+        current_cluster_info = await self.cache.get(self._current_cluster_key)
         if current_cluster_info and isinstance(current_cluster_info, dict):
             cluster_name = current_cluster_info.get("name")
             
@@ -275,10 +273,10 @@ class ClusterManager:
 _cluster_manager: Optional[ClusterManager] = None
 
 
-def init_cluster_manager(dmp_api: "DMPAPI", cache_manager: CacheManager) -> ClusterManager:
+def init_cluster_manager(dmp_api: "DMPAPI", cache: SimpleCache) -> ClusterManager:
     """初始化全局集群管理器实例"""
     global _cluster_manager
-    _cluster_manager = ClusterManager(dmp_api, cache_manager)
+    _cluster_manager = ClusterManager(dmp_api, cache)
     return _cluster_manager
 
 

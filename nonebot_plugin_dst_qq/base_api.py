@@ -8,8 +8,6 @@ from abc import ABC, abstractmethod
 import asyncio
 from dataclasses import dataclass
 from enum import Enum
-import logging
-
 # 导入配置
 from .config import Config
 from nonebot import logger

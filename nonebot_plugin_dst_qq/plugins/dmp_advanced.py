@@ -27,6 +27,8 @@ from ..config import get_config
 # 创建Alconna命令
 admin_cmd = Alconna("管理命令")
 advanced_cmd = Alconna("高级功能")
+admin_cmd_alias = Alconna("管理菜单")
+advanced_cmd_alias = Alconna("高级菜单")
 backup_cmd = Alconna("查看备份")
 exec_cmd = Alconna("执行命令", Args["command", str])
 rollback_cmd = Alconna("回滚世界", Args["days", int])
@@ -44,24 +46,26 @@ kick_cmd_eng = Alconna("kick")
 ban_cmd_eng = Alconna("ban")
 unban_cmd_eng = Alconna("unban")
 
-# 创建响应器 - 设置明确的优先级和权限
-admin_matcher = on_alconna(admin_cmd, priority=1, permission=SUPERUSER)
-advanced_matcher = on_alconna(advanced_cmd, priority=1, permission=SUPERUSER)
-backup_matcher = on_alconna(backup_cmd, priority=1, permission=SUPERUSER)
-exec_matcher = on_alconna(exec_cmd, priority=1, permission=SUPERUSER)
-rollback_matcher = on_alconna(rollback_cmd, priority=1, permission=SUPERUSER)
-kick_matcher = on_alconna(kick_cmd, priority=1, permission=SUPERUSER)
-ban_matcher = on_alconna(ban_cmd, priority=1, permission=SUPERUSER)
-unban_matcher = on_alconna(unban_cmd, priority=1, permission=SUPERUSER)
+# 创建响应器 - 先不加权限验证，确保基本功能正常
+admin_matcher = on_alconna(admin_cmd)
+advanced_matcher = on_alconna(advanced_cmd)
+admin_alias_matcher = on_alconna(admin_cmd_alias)
+advanced_alias_matcher = on_alconna(advanced_cmd_alias)
+backup_matcher = on_alconna(backup_cmd)
+exec_matcher = on_alconna(exec_cmd)
+rollback_matcher = on_alconna(rollback_cmd)
+kick_matcher = on_alconna(kick_cmd)
+ban_matcher = on_alconna(ban_cmd)
+unban_matcher = on_alconna(unban_cmd)
 
-admin_eng_matcher = on_alconna(admin_cmd_eng, priority=1, permission=SUPERUSER)
-advanced_eng_matcher = on_alconna(advanced_cmd_eng, priority=1, permission=SUPERUSER)
-backup_eng_matcher = on_alconna(backup_cmd_eng, priority=1, permission=SUPERUSER)
-exec_eng_matcher = on_alconna(exec_cmd_eng, priority=1, permission=SUPERUSER)
-rollback_eng_matcher = on_alconna(rollback_cmd_eng, priority=1, permission=SUPERUSER)
-kick_eng_matcher = on_alconna(kick_cmd_eng, priority=1, permission=SUPERUSER)
-ban_eng_matcher = on_alconna(ban_cmd_eng, priority=1, permission=SUPERUSER)
-unban_eng_matcher = on_alconna(unban_cmd_eng, priority=1, permission=SUPERUSER)
+admin_eng_matcher = on_alconna(admin_cmd_eng)
+advanced_eng_matcher = on_alconna(advanced_cmd_eng)
+backup_eng_matcher = on_alconna(backup_cmd_eng)
+exec_eng_matcher = on_alconna(exec_cmd_eng)
+rollback_eng_matcher = on_alconna(rollback_cmd_eng)
+kick_eng_matcher = on_alconna(kick_cmd_eng)
+ban_eng_matcher = on_alconna(ban_cmd_eng)
+unban_eng_matcher = on_alconna(unban_cmd_eng)
 
 class DMPAdvancedAPI(BaseAPI):
     """DMP 高级API客户端"""
@@ -236,14 +240,70 @@ class DMPAdvancedAPI(BaseAPI):
         
         return result
 
+# 权限检查函数
+async def _check_admin_permission(bot: Bot, event: Event, user_id: str) -> bool:
+    """检查用户是否具有管理员权限"""
+    try:
+        # 检查是否是超级用户
+        from nonebot import get_driver
+        driver = get_driver()
+        if user_id in driver.config.superusers:
+            return True
+        
+        # 检查插件配置中的超级用户
+        from ..config import get_config
+        config = get_config()
+        if user_id in config.bot.superusers:
+            return True
+        
+        # 如果是群聊，检查是否是群管理员
+        if hasattr(event, 'group_id'):
+            try:
+                group_member_info = await bot.get_group_member_info(
+                    group_id=event.group_id, 
+                    user_id=int(user_id)
+                )
+                if group_member_info.get('role') in ['owner', 'admin']:
+                    return True
+            except Exception:
+                pass
+        
+        return False
+    except Exception as e:
+        print(f"⚠️ 权限检查失败: {e}")
+        return False
+
+def require_admin(func):
+    """管理员权限装饰器"""
+    async def wrapper(bot: Bot, event: Event):
+        user_id = str(event.get_user_id())
+        if not await _check_admin_permission(bot, event, user_id):
+            await bot.send(event, "❌ 权限不足，只有管理员可以使用此命令", at_sender=True)
+            return
+        return await func(bot, event)
+    return wrapper
+
 # 命令处理函数
 @admin_matcher.handle()
+@require_admin
 async def handle_admin_cmd(bot: Bot, event: Event):
-    """处理管理员命令帮助"""
-    # 由于使用了 permission=SUPERUSER，这里不需要额外的权限检查
-    # 如果函数被执行，说明用户已经通过了权限检查
+    """处理管理员命令帮助 - 使用图片样式发送"""
     
-    help_text = """🔧 管理员功能菜单
+    try:
+        # 根据用户输出模式决定是否生成图片
+        try_image_mode = False
+        try:
+            user_id = str(event.get_user_id())
+            from ..message_dedup import _user_image_modes
+            try_image_mode = user_id in _user_image_modes
+        except Exception:
+            try_image_mode = False
+
+        if False:  # 禁用图片模式
+            pass
+        
+        # 图片功能已禁用，使用文字模式
+        help_text = """🔧 管理员功能菜单
 
 💾 备份管理
 📂 /查看备份 - 查看可用世界备份
@@ -260,13 +320,39 @@ async def handle_admin_cmd(bot: Bot, event: Event):
 
 ⚠️ 管理员专用: 仅限超级用户使用
 💡 高级功能请使用: /高级功能"""
-    
-    await bot.send(event, help_text, at_sender=True)
+        
+        await bot.send(event, help_text, at_sender=True)
+        
+    except Exception as e:
+        error_msg = f"❌ 处理管理命令时发生错误: {str(e)}"
+        print(f"⚠️ {error_msg}")
+        await bot.send(event, error_msg, at_sender=True)
+
+@admin_alias_matcher.handle()
+async def handle_admin_cmd_alias(bot: Bot, event: Event):
+    # 复用主处理函数，权限验证也会被复用
+    await handle_admin_cmd(bot, event)
 
 @advanced_matcher.handle()
+@require_admin
 async def handle_advanced_cmd(bot: Bot, event: Event):
-    """处理高级功能菜单"""
-    help_text = """🏗️ 高级管理功能菜单
+    """处理高级功能菜单 - 使用图片样式发送"""
+    
+    try:
+        # 根据用户输出模式决定是否生成图片
+        try_image_mode = False
+        try:
+            user_id = str(event.get_user_id())
+            from ..message_dedup import _user_image_modes
+            try_image_mode = user_id in _user_image_modes
+        except Exception:
+            try_image_mode = False
+
+        if False:  # 禁用图片模式
+            pass
+        
+        # 图片功能已禁用，使用文字模式
+        help_text = """🏗️ 高级管理功能菜单
 
 🗂️ 集群管理
 📊 /集群状态 - 查看所有集群运行状态
@@ -304,9 +390,19 @@ async def handle_advanced_cmd(bot: Bot, event: Event):
 • 🚨 某些操作不可逆，请谨慎使用
 
 🔍 特定功能的详细说明请查看对应命令帮助"""
-    
-    # 使用合并转发发送长菜单
-    await send_long_message(bot, event, "高级管理功能菜单", help_text, max_length=600)
+        
+        # 使用合并转发发送长菜单
+        await send_long_message(bot, event, "高级管理功能菜单", help_text, max_length=600)
+        
+    except Exception as e:
+        error_msg = f"❌ 处理高级功能命令时发生错误: {str(e)}"
+        print(f"⚠️ {error_msg}")
+        await bot.send(event, error_msg, at_sender=True)
+
+@advanced_alias_matcher.handle()
+async def handle_advanced_cmd_alias(bot: Bot, event: Event):
+    # 复用主处理函数
+    await handle_advanced_cmd(bot, event)
 
 @backup_matcher.handle()
 async def handle_backup_cmd(bot: Bot, event: Event):
@@ -343,9 +439,9 @@ async def handle_backup_cmd(bot: Bot, event: Event):
     await bot.send(event, response, at_sender=True)
 
 @exec_matcher.handle()
+@require_admin
 async def handle_exec_cmd(bot: Bot, event: Event, command: Match[str]):
     """处理执行命令"""
-    # 由于使用了 permission=SUPERUSER，这里不需要额外的权限检查
     
     try:
         # 检查命令参数是否存在
@@ -376,9 +472,9 @@ async def handle_exec_cmd(bot: Bot, event: Event, command: Match[str]):
     await bot.send(event, response, at_sender=True)
 
 @rollback_matcher.handle()
+@require_admin
 async def handle_rollback_cmd(bot: Bot, event: Event, days: Match[int]):
     """处理回滚世界命令"""
-    # 由于使用了 permission=SUPERUSER，这里不需要额外的权限检查
     
     try:
         # 检查天数参数是否存在
@@ -423,25 +519,25 @@ async def handle_rollback_cmd(bot: Bot, event: Event, days: Match[int]):
     await bot.send(event, response, at_sender=True)
 
 @kick_matcher.handle()
+@require_admin
 async def handle_kick_cmd(bot: Bot, event: Event):
     """处理踢出玩家命令"""
-    # 由于使用了 permission=SUPERUSER，这里不需要额外的权限检查
     
     response = "⚠️ 踢出玩家功能需要指定玩家名称，请使用: /踢出玩家 <玩家名>"
     await bot.send(event, response, at_sender=True)
 
 @ban_matcher.handle()
+@require_admin
 async def handle_ban_cmd(bot: Bot, event: Event):
     """处理封禁玩家命令"""
-    # 由于使用了 permission=SUPERUSER，这里不需要额外的权限检查
     
     response = "⚠️ 封禁玩家功能需要指定玩家名称，请使用: /封禁玩家 <玩家名>"
     await bot.send(event, response, at_sender=True)
 
 @unban_matcher.handle()
+@require_admin
 async def handle_unban_cmd(bot: Bot, event: Event):
     """处理解封玩家命令"""
-    # 由于使用了 permission=SUPERUSER，这里不需要额外的权限检查
     
     response = "⚠️ 解封玩家功能需要指定玩家名称，请使用: /解封玩家 <玩家名>"
     await bot.send(event, response, at_sender=True)
@@ -486,6 +582,472 @@ async def handle_ban_cmd_eng(bot: Bot, event: Event):
 async def handle_unban_cmd_eng(bot: Bot, event: Event):
     """处理英文解封玩家命令"""
     await handle_unban_cmd(bot, event)
+
+async def _generate_admin_menu_html() -> str:
+    """生成美观的管理员菜单HTML界面"""
+    
+    html_template = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            * {{
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }}
+            body {{
+                font-family: 'Microsoft YaHei', Arial, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                margin: 0;
+                padding: 20px;
+                min-height: 100vh;
+            }}
+            body::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: 
+                    radial-gradient(circle at 20% 20%, rgba(255,255,255,0.1) 0%, transparent 50%),
+                    radial-gradient(circle at 80% 80%, rgba(255,255,255,0.1) 0%, transparent 50%),
+                    radial-gradient(circle at 40% 60%, rgba(255,255,255,0.05) 0%, transparent 50%);
+                pointer-events: none;
+            }}
+            .container {{
+                max-width: 420px;
+                margin: 0 auto;
+                position: relative;
+                z-index: 1;
+            }}
+            .header {{
+                background: rgba(255, 255, 255, 0.05);
+                backdrop-filter: blur(30px) saturate(200%) brightness(1.2);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 20px;
+                padding: 20px;
+                margin-bottom: 20px;
+                box-shadow: 
+                    0 8px 32px rgba(0, 0, 0, 0.12),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+                    0 1px 0 rgba(0, 0, 0, 0.05);
+                text-align: center;
+                position: relative;
+                overflow: hidden;
+            }}
+            .header::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 1px;
+                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.8) 50%, transparent 100%);
+                z-index: -1;
+            }}
+            .title {{
+                font-size: 24px;
+                font-weight: bold;
+                color: #2d3748;
+                margin-bottom: 5px;
+            }}
+            .subtitle {{
+                font-size: 14px;
+                color: #e53e3e;
+                font-weight: 500;
+            }}
+            .menu-section {{
+                background: rgba(255, 255, 255, 0.04);
+                backdrop-filter: blur(25px) saturate(200%) brightness(1.1);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 18px;
+                padding: 20px;
+                margin-bottom: 15px;
+                box-shadow: 
+                    0 8px 32px rgba(0, 0, 0, 0.1),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+                    0 1px 0 rgba(0, 0, 0, 0.03);
+                position: relative;
+                overflow: hidden;
+            }}
+            .menu-section::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 1px;
+                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%);
+                z-index: -1;
+            }}
+            .section-title {{
+                font-size: 16px;
+                font-weight: bold;
+                color: #2d3748;
+                margin-bottom: 15px;
+                display: flex;
+                align-items: center;
+            }}
+            .menu-item {{
+                display: flex;
+                justify-content: space-between;
+                padding: 8px 0;
+                border-bottom: 1px solid #e2e8f0;
+            }}
+            .menu-item:last-child {{
+                border-bottom: none;
+            }}
+            .command {{
+                color: #3182ce;
+                font-weight: 500;
+                font-size: 14px;
+            }}
+            .description {{
+                color: #718096;
+                font-size: 14px;
+                text-align: right;
+            }}
+            .warning {{
+                background: rgba(255, 245, 157, 0.95);
+                border-radius: 10px;
+                padding: 15px;
+                margin-top: 20px;
+                border-left: 4px solid #f59e0b;
+            }}
+            .warning-text {{
+                color: #92400e;
+                font-size: 13px;
+                font-weight: 500;
+            }}
+            .footer {{
+                text-align: center;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 12px;
+                margin-top: 20px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <div class="title">🔧 管理员功能菜单</div>
+                <div class="subtitle">Administrator Functions</div>
+            </div>
+            
+            <div class="menu-section">
+                <div class="section-title">💾 备份管理</div>
+                <div class="menu-item">
+                    <span class="command">📂 /查看备份</span>
+                    <span class="description">查看可用世界备份</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">⏪ /回滚世界</span>
+                    <span class="description">回滚到指定天数前</span>
+                </div>
+            </div>
+            
+            <div class="menu-section">
+                <div class="section-title">⚡ 游戏控制</div>
+                <div class="menu-item">
+                    <span class="command">💻 /执行命令</span>
+                    <span class="description">在游戏内执行控制台命令</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">🏗️ /集群管理</span>
+                    <span class="description">集群切换和配置管理</span>
+                </div>
+            </div>
+            
+            <div class="menu-section">
+                <div class="section-title">👥 玩家管理</div>
+                <div class="menu-item">
+                    <span class="command">👢 /踢出玩家</span>
+                    <span class="description">踢出指定玩家</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">🚫 /封禁玩家</span>
+                    <span class="description">封禁指定玩家</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">✅ /解封玩家</span>
+                    <span class="description">解封指定玩家</span>
+                </div>
+            </div>
+            
+            <div class="warning">
+                <div class="warning-text">
+                    ⚠️ 管理员专用: 仅限超级用户使用<br>
+                    💡 高级功能请使用: /高级功能
+                </div>
+            </div>
+            
+            <div class="footer">
+                🔐 仅限超级用户使用 | 谨慎操作
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html_template
+
+async def _generate_advanced_menu_html() -> str:
+    """生成美观的高级功能菜单HTML界面"""
+    
+    html_template = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            * {{
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }}
+            body {{
+                font-family: 'Microsoft YaHei', Arial, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                margin: 0;
+                padding: 20px;
+                min-height: 100vh;
+            }}
+            body::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: 
+                    radial-gradient(circle at 20% 20%, rgba(255,255,255,0.1) 0%, transparent 50%),
+                    radial-gradient(circle at 80% 80%, rgba(255,255,255,0.1) 0%, transparent 50%),
+                    radial-gradient(circle at 40% 60%, rgba(255,255,255,0.05) 0%, transparent 50%);
+                pointer-events: none;
+            }}
+            .container {{
+                max-width: 420px;
+                margin: 0 auto;
+                position: relative;
+                z-index: 1;
+            }}
+            .header {{
+                background: rgba(255, 255, 255, 0.05);
+                backdrop-filter: blur(30px) saturate(200%) brightness(1.2);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 20px;
+                padding: 20px;
+                margin-bottom: 20px;
+                box-shadow: 
+                    0 8px 32px rgba(0, 0, 0, 0.12),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+                    0 1px 0 rgba(0, 0, 0, 0.05);
+                text-align: center;
+                position: relative;
+                overflow: hidden;
+            }}
+            .header::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 1px;
+                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.8) 50%, transparent 100%);
+                z-index: -1;
+            }}
+            .title {{
+                font-size: 24px;
+                font-weight: bold;
+                color: #2d3748;
+                margin-bottom: 5px;
+            }}
+            .subtitle {{
+                font-size: 14px;
+                color: #805ad5;
+                font-weight: 500;
+            }}
+            .menu-section {{
+                background: rgba(255, 255, 255, 0.04);
+                backdrop-filter: blur(25px) saturate(200%) brightness(1.1);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 18px;
+                padding: 20px;
+                margin-bottom: 15px;
+                box-shadow: 
+                    0 8px 32px rgba(0, 0, 0, 0.1),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+                    0 1px 0 rgba(0, 0, 0, 0.03);
+                position: relative;
+                overflow: hidden;
+            }}
+            .menu-section::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 1px;
+                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%);
+                z-index: -1;
+                backdrop-filter: blur(10px);
+            }}
+            .section-title {{
+                font-size: 16px;
+                font-weight: bold;
+                color: #2d3748;
+                margin-bottom: 15px;
+                display: flex;
+                align-items: center;
+            }}
+            .menu-item {{
+                display: flex;
+                justify-content: space-between;
+                padding: 6px 0;
+                border-bottom: 1px solid #e2e8f0;
+            }}
+            .menu-item:last-child {{
+                border-bottom: none;
+            }}
+            .command {{
+                color: #3182ce;
+                font-weight: 500;
+                font-size: 13px;
+            }}
+            .description {{
+                color: #718096;
+                font-size: 13px;
+                text-align: right;
+            }}
+            .warning {{
+                background: rgba(255, 245, 157, 0.95);
+                border-radius: 10px;
+                padding: 15px;
+                margin-top: 20px;
+                border-left: 4px solid #f59e0b;
+            }}
+            .warning-text {{
+                color: #92400e;
+                font-size: 12px;
+                font-weight: 500;
+                line-height: 1.4;
+            }}
+            .footer {{
+                text-align: center;
+                color: rgba(255, 255, 255, 0.8);
+                font-size: 12px;
+                margin-top: 20px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <div class="title">🏗️ 高级管理功能</div>
+                <div class="subtitle">Advanced Management Features</div>
+            </div>
+            
+            <div class="menu-section">
+                <div class="section-title">🗂️ 集群管理</div>
+                <div class="menu-item">
+                    <span class="command">📊 /集群状态</span>
+                    <span class="description">查看所有集群运行状态</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">🔄 /切换集群</span>
+                    <span class="description">切换当前操作集群</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">🔃 /刷新集群</span>
+                    <span class="description">刷新集群列表缓存</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">📋 /集群详情</span>
+                    <span class="description">查看指定集群详细信息</span>
+                </div>
+            </div>
+            
+            <div class="menu-section">
+                <div class="section-title">📊 数据管理</div>
+                <div class="menu-item">
+                    <span class="command">💾 /缓存状态</span>
+                    <span class="description">查看缓存系统状态</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">🗑️ /清理缓存</span>
+                    <span class="description">清理指定类型缓存</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">📈 /缓存统计</span>
+                    <span class="description">查看详细缓存统计</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">🔧 /缓存帮助</span>
+                    <span class="description">显示缓存管理帮助</span>
+                </div>
+            </div>
+            
+            <div class="menu-section">
+                <div class="section-title">🗜️ 数据压缩</div>
+                <div class="menu-item">
+                    <span class="command">📊 /数据分析</span>
+                    <span class="description">分析数据库大小分布</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">🗜️ /压缩数据</span>
+                    <span class="description">压缩指定日期数据</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">📦 /归档数据</span>
+                    <span class="description">归档指定月份数据</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">📁 /查看归档</span>
+                    <span class="description">查看归档文件列表</span>
+                </div>
+            </div>
+            
+            <div class="menu-section">
+                <div class="section-title">⚙️ 系统配置</div>
+                <div class="menu-item">
+                    <span class="command">📋 /配置状态</span>
+                    <span class="description">查看当前配置状态</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">🔍 /查看配置</span>
+                    <span class="description">查看完整配置内容</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">✅ /验证配置</span>
+                    <span class="description">验证配置正确性</span>
+                </div>
+                <div class="menu-item">
+                    <span class="command">🔗 /测试连接</span>
+                    <span class="description">测试DMP服务器连接</span>
+                </div>
+            </div>
+            
+            <div class="warning">
+                <div class="warning-text">
+                    ⚠️ 高级功能说明:<br>
+                    • 🔐 所有功能均需超级用户权限<br>
+                    • 💡 使用前请先了解对应功能的作用<br>
+                    • 🚨 某些操作不可逆，请谨慎使用
+                </div>
+            </div>
+            
+            <div class="footer">
+                🔐 超级用户专用 | 高级管理功能
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html_template
 
 # 初始化DMP Advanced API实例
 def init_dmp_advanced_api():

@@ -10,6 +10,10 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from nonebot import logger
 
+
+T = TypeVar('T')
+
+# ===== 配置常量 =====
 # Lazy import localstore only when needed
 def _get_localstore():
     """Lazy import and initialization of localstore"""
@@ -18,27 +22,38 @@ def _get_localstore():
         require("nonebot_plugin_localstore")
         import nonebot_plugin_localstore as store
         return store
-    except Exception:
-        # Fallback to plugin directory if localstore fails
-        return None
+    except Exception as e:
+        # 强制要求 localstore，不再回退
+        raise RuntimeError("nonebot_plugin_localstore 未就绪，无法获取配置目录") from e
 
-T = TypeVar('T')
-
-# ===== 配置常量 =====
 # 动态获取配置目录
 def get_config_dir() -> Path:
     """获取配置目录，优先使用localstore"""
     store = _get_localstore()
-    if store:
-        try:
-            return store.get_plugin_config_dir()
-        except Exception:
-            pass
-    # Fallback to plugin directory
-    return Path(__file__).parent
+    return store.get_plugin_config_dir()
 
 # 延迟初始化配置路径
-TEMPLATE_CONFIG_FILE = Path(__file__).parent / "app_config.template.json"
+def get_template_config_file() -> Path:
+    """获取模板配置文件路径"""
+    config_dir = get_config_dir()
+    template_file = config_dir / "app_config.template.json"
+    
+    # 如果localstore目录中不存在模板文件，尝试从插件目录复制
+    if not template_file.exists():
+        plugin_template = Path(__file__).parent / "app_config.template.json"
+        if plugin_template.exists():
+            try:
+                # 确保目录存在
+                config_dir.mkdir(parents=True, exist_ok=True)
+                import shutil
+                shutil.copy2(plugin_template, template_file)
+                logger.info(f"复制模板文件到配置目录: {template_file}")
+            except Exception as e:
+                logger.warning(f"复制模板文件失败: {e}")
+                # 回退到插件目录中的模板
+                return plugin_template
+    
+    return template_file
 
 # ================================================================================
 # 饥荒联机版DMP QQ机器人 配置文件
@@ -167,6 +182,33 @@ class Config(BaseModel):
     version: str
     last_updated: str
     
+    def model_post_init(self, _) -> None:
+        """模型初始化后处理，自动设置目录路径"""
+        self._setup_localstore_paths()
+    
+    def _setup_localstore_paths(self):
+        """设置localstore路径"""
+        try:
+            store = _get_localstore()
+            
+            # 如果缓存目录为空，使用localstore默认路径
+            if not self.cache.file_cache_dir:
+                self.cache.file_cache_dir = str(store.get_plugin_cache_dir())
+            
+            # 如果日志文件路径为空，使用localstore数据目录
+            if not self.logging.log_file_path:
+                log_dir = store.get_plugin_data_dir() / "logs"
+                log_dir.mkdir(parents=True, exist_ok=True)
+                self.logging.log_file_path = str(log_dir / "app.log")
+                
+        except Exception as e:
+            logger.warning(f"设置localstore路径失败: {e}")
+            # 如果localstore不可用，使用相对路径作为备用
+            if not self.cache.file_cache_dir:
+                self.cache.file_cache_dir = "./cache"
+            if not self.logging.log_file_path:
+                self.logging.log_file_path = "./logs/app.log"
+    
     # 兼容性属性（保持向后兼容）
     @property
     def dmp_base_url(self) -> str:
@@ -210,7 +252,13 @@ class ConfigManager:
     
     def __init__(self, config_file: Optional[Path] = None):
         config_dir = get_config_dir()
-        self.config_file = config_file or (config_dir / "app_config.json")
+        # 使用用户指定的配置文件路径，或者默认路径
+        if config_file:
+            self.config_file = config_file
+        else:
+            # 默认使用localstore目录下的配置文件
+            default_config_file = config_dir / "app_config.json"
+            self.config_file = default_config_file
         self.backup_file = config_dir / "app_config.backup.json"
         
         self._config: Optional[Config] = None
@@ -283,10 +331,11 @@ class ConfigManager:
     def _create_config_from_template(self) -> bool:
         """从模板创建配置文件"""
         try:
-            if TEMPLATE_CONFIG_FILE.exists():
+            template_file = get_template_config_file()
+            if template_file.exists():
                 # 复制模板文件到配置文件
                 import shutil
-                shutil.copy2(TEMPLATE_CONFIG_FILE, self.config_file)
+                shutil.copy2(template_file, self.config_file)
                 
                 # 显示配置指南
                 print("\n" + "="*60)

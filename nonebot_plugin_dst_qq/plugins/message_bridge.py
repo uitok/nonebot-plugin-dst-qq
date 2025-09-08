@@ -55,6 +55,7 @@ class MessageType(Enum):
     DEATH = "death"
 
 
+
 @dataclass
 class UserSession:
     """用户会话信息"""
@@ -250,13 +251,7 @@ class DMPApiClient:
                     return data.get("data", [])
                 return []
         except Exception as e:
-            logger.error(
-                "获取聊天日志失败",
-                category=LogCategory.API,
-                error=e,
-                cluster_name=cluster_name,
-                world_name=world_name
-            )
+            logger.error(f"获取聊天日志失败: {e}, cluster_name={cluster_name}, world_name={world_name}")
             return []
     
     async def send_message_to_game(self, message: str, cluster_name: str, world_name: str = "") -> bool:
@@ -285,25 +280,13 @@ class DMPApiClient:
                 
                 success = result.get("code") == 200
                 if success:
-                    logger.info(
-                        "消息已发送到游戏",
-                        category=LogCategory.MESSAGE,
-                        extra={"sent_message": message},
-                        cluster_name=cluster_name,
-                        world_name=world_name
-                    )
+                    logger.info(f"消息已发送到游戏: {message}, cluster_name={cluster_name}, world_name={world_name}")
                 else:
-                    logger.error(
-                        f"发送消息到游戏失败 cluster:{cluster_name} world:{world_name}: {result}",
-                        category=LogCategory.MESSAGE
-                    )
+                    logger.error(f"发送消息到游戏失败 cluster:{cluster_name} world:{world_name}: {result}")
                 
                 return success
         except Exception as e:
-            logger.error(
-                f"发送消息到游戏出错 cluster:{cluster_name}: {str(e)}",
-                category=LogCategory.MESSAGE
-            )
+            logger.error(f"发送消息到游戏出错 cluster:{cluster_name}: {str(e)}")
             return False
 
 
@@ -391,10 +374,7 @@ class UserSessionManager:
                 self.group_sessions[group_id] = set()
             self.group_sessions[group_id].add(user_id)
         
-        logger.info(
-            f"创建用户会话 user:{user_id} mode:{chat_mode.value} group:{group_id}",
-            category=LogCategory.MESSAGE
-        )
+        logger.info(f"创建用户会话 user:{user_id} mode:{chat_mode.value} group:{group_id}")
         
         return session
     
@@ -416,11 +396,7 @@ class UserSessionManager:
             
             del self.sessions[user_id]
             
-            logger.info(
-                "移除用户会话",
-                category=LogCategory.MESSAGE,
-                user_id=user_id
-            )
+            logger.info(f"移除用户会话: user_id={user_id}")
     
     def get_active_sessions(self) -> List[UserSession]:
         """获取所有活跃会话"""
