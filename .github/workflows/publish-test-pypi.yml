@@ -1,0 +1,94 @@
+name: Publish to Test PyPI
+
+on:
+  push:
+    tags:
+      - 'v*-dev'      # 匹配如 v0.4.6-dev 的标签
+      - 'v*-alpha'    # 匹配如 v0.4.6-alpha 的标签
+      - 'v*-beta'     # 匹配如 v0.4.6-beta 的标签
+      - 'v*-rc*'      # 匹配如 v0.4.6-rc1 的标签
+  workflow_dispatch:   # 允许手动触发
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整历史，用于版本标签
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine hatchling
+    
+    - name: Extract version from tag
+      id: get_version
+      run: |
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        VERSION=${TAG_NAME#v}  # 移除前缀 'v'
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+    
+    - name: Update version in pyproject.toml
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+        echo "Updated version to: $VERSION"
+        grep "^version" pyproject.toml
+    
+    - name: Build package
+      run: |
+        python -m build
+        echo "Build completed successfully"
+        ls -la dist/
+    
+    - name: Check package
+      run: |
+        python -m twine check dist/*
+    
+    - name: Publish to Test PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        skip-existing: true
+    
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.tag_name }}
+        release_name: "Development Release ${{ steps.get_version.outputs.tag_name }}"
+        body: |
+          ## 开发版本发布 ${{ steps.get_version.outputs.tag_name }}
+          
+          这是一个开发/测试版本，已自动发布到 [Test PyPI](https://test.pypi.org/project/nonebot-plugin-dst-qq/)。
+          
+          ### 安装方式
+          ```bash
+          pip install -i https://test.pypi.org/simple/ nonebot-plugin-dst-qq==${{ steps.get_version.outputs.version }}
+          ```
+          
+          ### 注意事项
+          - 这是开发版本，可能包含未完全测试的功能
+          - 仅用于测试和预览，不推荐生产环境使用
+          - 如需稳定版本，请使用正式发布的版本
+          
+          详细变更请查看提交历史。
+        draft: false
+        prerelease: true
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: dist-files
+        path: dist/
