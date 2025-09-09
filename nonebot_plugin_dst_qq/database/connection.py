@@ -48,10 +48,8 @@ class DatabaseManager:
             raise ValueError(f"未知的数据库名称: {db_name}")
         
         async with self._locks[db_name]:
-            # 如果连接不存在或已关闭，创建新连接
-            if (self._connections.get(db_name) is None or 
-                self._connections[db_name].closed):
-                
+            # 如果连接不存在，创建新连接
+            if self._connections.get(db_name) is None:
                 db_path = self.databases[db_name]
                 self._connections[db_name] = await aiosqlite.connect(str(db_path))
                 logger.debug(f"📊 创建数据库连接: {db_name}")
@@ -197,9 +195,12 @@ class DatabaseManager:
     async def close_all(self):
         """关闭所有数据库连接"""
         for db_name, conn in self._connections.items():
-            if conn and not conn.closed:
-                await conn.close()
-                logger.debug(f"📊 关闭数据库连接: {db_name}")
+            if conn:
+                try:
+                    await conn.close()
+                    logger.debug(f"📊 关闭数据库连接: {db_name}")
+                except Exception as e:
+                    logger.warning(f"关闭连接时出错 {db_name}: {e}")
         
         self._connections.clear()
         logger.info("🔒 所有数据库连接已关闭")

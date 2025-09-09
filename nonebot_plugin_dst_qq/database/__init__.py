@@ -88,12 +88,19 @@ class ItemWikiManager:
             self._init_lock = True
     
     async def _load_builtin_items(self):
+        """加载内置物品数据"""
         try:
             from ..item_data import ITEM_NAME_MAPPING
             for english_name, chinese_name in ITEM_NAME_MAPPING.items():
-                await self.model.add_item(english_name, chinese_name)
-        except Exception:
-            pass
+                # 为兼容性，添加默认类别和描述
+                await self.model.add_item(
+                    english_name=english_name,
+                    chinese_name=chinese_name,
+                    category='general',  # 默认类别
+                    description=f'{chinese_name}（{english_name}）'  # 默认描述
+                )
+        except Exception as e:
+            logger.warning(f"加载内置物品数据时出错: {e}")
     
     async def search_items(self, keyword: str, limit: int = 10):
         return await self.model.search_items(keyword, limit)
