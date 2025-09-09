@@ -1,6 +1,6 @@
 [project]
 name = "nonebot-plugin-dst-qq"
-version = "0.4.3"
+version = "0.4.4"
 description = "基于 NoneBot2 的饥荒管理平台 (DMP) QQ 机器人插件，支持游戏信息查询、命令执行和消息互通功能"
 readme = "README.md"
 requires-python = ">=3.9, <4.0"

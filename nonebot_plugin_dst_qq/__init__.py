@@ -81,24 +81,27 @@ __plugin_meta__ = PluginMetadata(
 # 使用新的配置管理器
 from .config import get_config_manager, get_config
 
-# 导入子插件模块
-print("🔍 开始导入子插件模块...")
-
-# 核心功能模块
-from .plugins import dmp_api, dmp_advanced, message_bridge
-print("✅ 核心功能模块导入成功")
-
-# 命令模块
-from . import admin_commands, cluster_commands, debug_commands, item_commands, server_commands
-print("✅ 命令模块导入成功")
-
-print("✅ 所有子插件模块加载成功")
+# 导入子插件模块将在启动时进行，避免在插件加载时导入Alconna
+# 这样可以避免与其他插件的加载冲突
 
 async def init_components():
     """初始化各组件"""
     components = []
     
     try:
+        # 延迟导入命令模块，避免在插件加载时导入Alconna
+        print("🔍 开始导入子插件模块...")
+        
+        # 核心功能模块
+        from .plugins import dmp_api, dmp_advanced, message_bridge
+        print("✅ 核心功能模块导入成功")
+
+        # 命令模块
+        from . import admin_commands, cluster_commands, debug_commands, item_commands, server_commands
+        print("✅ 命令模块导入成功")
+        
+        print("✅ 所有子插件模块加载成功")
+        
         # 配置系统
         config_manager = get_config_manager()
         config = config_manager.get_config()
