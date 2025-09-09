@@ -251,6 +251,34 @@ class ItemWikiModel(BaseModel):
     async def init(self):
         """初始化物品数据库"""
         await self.db.init_database(self.DB_NAME, self.INIT_SQL)
+        
+        # 数据库迁移：为旧表添加新列
+        await self._migrate_table_schema()
+    
+    async def _migrate_table_schema(self):
+        """迁移表结构，添加缺失的列"""
+        try:
+            # 检查表是否存在以及列结构
+            async with self.db.get_connection(self.DB_NAME) as conn:
+                cursor = await conn.execute("PRAGMA table_info(dst_items)")
+                columns_info = await cursor.fetchall()
+                
+                if columns_info:
+                    # 获取现有列名
+                    existing_columns = [col[1] for col in columns_info]
+                    
+                    # 添加缺失的列
+                    if 'category' not in existing_columns:
+                        await conn.execute("ALTER TABLE dst_items ADD COLUMN category TEXT")
+                        logger.info("✅ 已添加 category 列到 dst_items 表")
+                    
+                    if 'description' not in existing_columns:
+                        await conn.execute("ALTER TABLE dst_items ADD COLUMN description TEXT")
+                        logger.info("✅ 已添加 description 列到 dst_items 表")
+                    
+                    await conn.commit()
+        except Exception as e:
+            logger.warning(f"数据库表结构迁移出错: {e}")
     
     async def search_items(self, keyword: str, limit: int = 10) -> List[Dict[str, Any]]:
         """搜索物品"""

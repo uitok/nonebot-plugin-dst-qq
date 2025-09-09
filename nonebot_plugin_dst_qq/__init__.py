@@ -157,9 +157,13 @@ async def shutdown():
         print("✅ 消息互通服务已停止")
         
         # 显示缓存统计
-        cache = get_cache()
-        stats = cache.get_stats()
-        print(f"📊 缓存统计: 内存项目 {stats.get('memory_items', 0)}, 命中率 {stats.get('hit_rate', 0):.1%}")
+        try:
+            from .simple_cache import get_cache
+            cache = get_cache()
+            stats = cache.get_stats()
+            print(f"📊 缓存统计: 内存项目 {stats.get('memory_items', 0)}, 命中率 {stats.get('hit_rate', 0):.1%}")
+        except Exception:
+            print("📊 缓存统计获取失败")
         
     except Exception as e:
         print(f"⚠️ 清理异常: {e}")
