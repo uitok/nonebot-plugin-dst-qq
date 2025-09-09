@@ -3,6 +3,7 @@
 统一的数据库连接管理和数据模型
 """
 
+from nonebot import logger
 from .connection import DatabaseManager
 from .models import ChatHistoryModel, ItemWikiModel, ArchiveModel
 
@@ -104,6 +105,50 @@ class ItemWikiManager:
     
     async def search_items(self, keyword: str, limit: int = 10):
         return await self.model.search_items(keyword, limit)
+    
+    def search_items_quick(self, keyword: str, limit: int = 10):
+        """快速搜索物品（同步方法，用于向下兼容）"""
+        try:
+            # 使用内置数据进行快速搜索
+            from ..item_data import search_items as builtin_search
+            results = builtin_search(keyword)[:limit]
+            
+            # 转换为数据库格式
+            formatted_results = []
+            for english_name, chinese_name in results:
+                formatted_results.append({
+                    'english_name': english_name,
+                    'chinese_name': chinese_name,
+                    'category': 'general',
+                    'description': f'{chinese_name}（{english_name}）'
+                })
+            
+            return formatted_results
+        except Exception as e:
+            logger.error(f"快速搜索物品失败: {e}")
+            return []
+    
+    async def get_item_wiki_image(self, item_name: str):
+        """获取物品Wiki图片（占位实现）"""
+        try:
+            logger.info(f"尝试获取Wiki图片: {item_name}")
+            # 这里应该实现实际的Wiki图片获取逻辑
+            # 目前返回None表示获取失败
+            return None
+        except Exception as e:
+            logger.error(f"获取Wiki图片失败: {e}")
+            return None
+    
+    async def reload_items_data(self):
+        """重载物品数据"""
+        try:
+            # 重新加载内置物品数据
+            await self._load_builtin_items()
+            logger.info("物品数据重载成功")
+            return True
+        except Exception as e:
+            logger.error(f"重载物品数据失败: {e}")
+            return False
 
 
 class DataArchiveManager:
