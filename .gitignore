@@ -216,8 +216,12 @@ logs/
 secrets/
 private_config/
 
+# Claude Code settings
+.claude/
+
 # Build artifacts and temporary files
 dist/
+release/
 build/
 *.whl
 *.tar.gz
