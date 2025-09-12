@@ -2,8 +2,8 @@
 饥荒物品名对照数据
 Don't Starve Together Item Name Mapping Data
 
-版本: v5.1 (内置数据版本)
-更新: 2024.9.11 - 添加饥荒角色数据
+版本: v5.0 (内置数据版本)
+更新: 2024.9.14
 此模块包含饥荒物品中英文对照数据，无需外部文件依赖
 """
 
@@ -77,26 +77,7 @@ ITEM_NAME_MAPPING = {    'abigail': '阿比盖尔',
     'twigs': '树枝',
     'umbrella': '雨伞',
     'walkingcane': '步行手杖',
-    'winterhat': '冬帽',
-    
-    # 饥荒角色
-    'wilson': '威尔逊',
-    'willow': '薇洛',
-    'wolfgang': '沃尔夫冈',
-    'wendy': '温迪',
-    'wx78': 'WX-78',
-    'wickerbottom': '薇克伯顿',
-    'woodie': '伍迪',
-    'wes': '韦斯',
-    'maxwell': '麦斯威尔',
-    'wigfrid': '薇格弗德',
-    'webber': '韦伯',
-    'warly': '沃利',
-    'wormwood': '沃姆伍德',
-    'winona': '薇诺娜',
-    'wurt': '沃特',
-    'walter': '沃尔特',
-    'wanda': '旺达'
+    'winterhat': '冬帽'
 }
 
 def get_chinese_name(english_name: str) -> str:
@@ -140,5 +121,5 @@ def get_total_count() -> int:
     return len(ITEM_NAME_MAPPING)
 
 # 模块信息
-__version__ = "5.1"
+__version__ = "5.0"
 __count__ = len(ITEM_NAME_MAPPING)

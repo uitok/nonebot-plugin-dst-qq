@@ -129,21 +129,12 @@ class ItemWikiManager:
             return []
     
     async def get_item_wiki_image(self, item_name: str):
-        """获取物品Wiki图片"""
+        """获取物品Wiki图片（占位实现）"""
         try:
             logger.info(f"尝试获取Wiki图片: {item_name}")
-            
-            # 使用新的Wiki截图工具
-            from ..wiki_screenshot import screenshot_wiki_item
-            screenshot_bytes = await screenshot_wiki_item(item_name)
-            
-            if screenshot_bytes:
-                logger.info(f"Wiki截图获取成功: {item_name}, 大小: {len(screenshot_bytes)} bytes")
-                return screenshot_bytes
-            else:
-                logger.warning(f"Wiki截图获取失败: {item_name}")
-                return None
-                
+            # 这里应该实现实际的Wiki图片获取逻辑
+            # 目前返回None表示获取失败
+            return None
         except Exception as e:
             logger.error(f"获取Wiki图片失败: {e}")
             return None
