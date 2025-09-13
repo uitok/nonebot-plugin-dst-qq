@@ -115,12 +115,12 @@ class ItemWikiManager:
             
             # 转换为数据库格式
             formatted_results = []
-            for english_name, chinese_name in results:
+            for item in results:
                 formatted_results.append({
-                    'english_name': english_name,
-                    'chinese_name': chinese_name,
+                    'english_name': item['english_name'],
+                    'chinese_name': item['chinese_name'],
                     'category': 'general',
-                    'description': f'{chinese_name}（{english_name}）'
+                    'description': f"{item['chinese_name']}（{item['english_name']}）"
                 })
             
             return formatted_results
@@ -129,12 +129,21 @@ class ItemWikiManager:
             return []
     
     async def get_item_wiki_image(self, item_name: str):
-        """获取物品Wiki图片（占位实现）"""
+        """获取物品Wiki图片"""
         try:
             logger.info(f"尝试获取Wiki图片: {item_name}")
-            # 这里应该实现实际的Wiki图片获取逻辑
-            # 目前返回None表示获取失败
-            return None
+            
+            # 使用新的Wiki截图工具
+            from ..wiki_screenshot import screenshot_wiki_item
+            screenshot_bytes = await screenshot_wiki_item(item_name)
+            
+            if screenshot_bytes:
+                logger.info(f"Wiki截图获取成功: {item_name}, 大小: {len(screenshot_bytes)} bytes")
+                return screenshot_bytes
+            else:
+                logger.warning(f"Wiki截图获取失败: {item_name}")
+                return None
+                
         except Exception as e:
             logger.error(f"获取Wiki图片失败: {e}")
             return None

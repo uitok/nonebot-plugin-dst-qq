@@ -23,14 +23,29 @@ def _get_localstore():
         import nonebot_plugin_localstore as store
         return store
     except Exception as e:
-        # 强制要求 localstore，不再回退
+        # 当localstore不可用时返回None，让调用方处理
         raise RuntimeError("nonebot_plugin_localstore 未就绪，无法获取配置目录") from e
 
 # 动态获取配置目录
 def get_config_dir() -> Path:
-    """获取配置目录，优先使用localstore"""
-    store = _get_localstore()
-    return store.get_plugin_config_dir()
+    """获取配置目录，优先使用工作目录下的config，再使用localstore"""
+    # 首先检查工作目录下的config目录
+    cwd_config = Path.cwd() / "config"
+    if cwd_config.exists() and cwd_config.is_dir():
+        logger.info(f"使用工作目录配置: {cwd_config}")
+        return cwd_config
+    
+    # 回退到localstore
+    try:
+        store = _get_localstore()
+        localstore_config = store.get_plugin_config_dir()
+        logger.info(f"使用localstore配置: {localstore_config}")
+        return localstore_config
+    except Exception as e:
+        logger.warning(f"localstore不可用，使用默认config目录: {e}")
+        # 创建工作目录下的config作为最后回退
+        cwd_config.mkdir(parents=True, exist_ok=True)
+        return cwd_config
 
 # 延迟初始化配置路径
 def get_template_config_file() -> Path:

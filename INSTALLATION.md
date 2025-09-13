@@ -6,15 +6,17 @@
 
 ### 最低要求
 - **Python**: 3.9+ (推荐 3.11+)
-- **系统内存**: 512MB+ 
-- **磁盘空间**: 100MB+
-- **网络**: 能访问GitHub和PyPI
+- **系统内存**: 1GB+ (因为Selenium需求) 
+- **磁盘空间**: 500MB+ (包括浏览器驱动)
+- **网络**: 能访问GitHub、PyPI和饥荒Wiki
+- **系统组件**: Chrome/Chromium浏览器(用于Wiki截图)
 
 ### 推荐环境
 - **Python**: 3.11 或 3.12
 - **系统**: Ubuntu 20.04+, Windows 10+, macOS 12+
-- **内存**: 1GB+
-- **CPU**: 1核心+
+- **内存**: 2GB+ (用于稳定的Wiki截图功能)
+- **CPU**: 2核心+ (支持并发处理)
+- **存储**: SSD磁盘(提升数据库性能)
 
 ## 🚀 快速安装
 
@@ -53,6 +55,11 @@ cd my-dst-bot
 ```bash
 # 使用 pip
 pip install nonebot2[fastapi] nonebot-adapter-onebot nonebot-plugin-dst-qq
+
+# 或者手动安装全部依赖
+pip install nonebot2[fastapi] nonebot-adapter-onebot nonebot-plugin-alconna \
+            nonebot-plugin-localstore nonebot-plugin-apscheduler nonebot-plugin-waiter \
+            httpx pydantic aiosqlite selenium watchdog
 
 # 使用 poetry (推荐)
 poetry init
@@ -95,7 +102,7 @@ LOG_LEVEL=INFO
 
 # OneBot V11 连接配置
 ONEBOT_WS_URLS=["ws://127.0.0.1:3001"]
-# ONEBOT_ACCESS_TOKEN="your-access-token"  # 如果go-cqhttp设置了token
+# ONEBOT_ACCESS_TOKEN="your-access-token"  # 如果OneBot客户端设置了token
 
 # 超级用户 (你的QQ号)
 SUPERUSERS=["123456789"]
@@ -119,9 +126,17 @@ SESSION_EXPIRE_TIMEOUT=120
 插件会自动创建配置文件，你需要编辑：
 
 #### 主配置文件位置
-```
-config/config/app_config.json
-```
+
+插件会按以下优先级查找配置目录：
+1. **工作目录下的config目录** (推荐)
+   ```
+   config/app_config.json
+   ```
+2. **nonebot-plugin-localstore 目录** (系统默认路径)
+   - Linux/macOS: `~/.config/nonebot2/nonebot_plugin_dst_qq/app_config.json`
+   - Windows: `%APPDATA%\nonebot2\nonebot_plugin_dst_qq\app_config.json`
+
+**推荐使用工作目录下的config目录**，这样配置文件与机器人在同一位置，便于管理。
 
 #### 配置文件模板
 ```json
@@ -148,6 +163,12 @@ config/config/app_config.json
         "max_message_length": 200,
         "auto_reconnect": true,
         "session_timeout": 1800
+    },
+    "wiki_settings": {
+        "enable_screenshot": true,
+        "screenshot_timeout": 30,
+        "headless_mode": true,
+        "cache_screenshots": true
     }
 }
 ```
@@ -164,75 +185,48 @@ config/config/app_config.json
 | `cache_settings.api_cache_ttl` | number | API缓存时间(秒) | `300` |
 | `database_settings.chat_history_days` | number | 聊天记录保存天数 | `30` |
 | `bridge_settings.session_timeout` | number | 会话超时时间(秒) | `1800` |
+| `wiki_settings.enable_screenshot` | boolean | 是否启用Wiki截图 | `true` |
+| `wiki_settings.screenshot_timeout` | number | 截图超时时间(秒) | `30` |
+| `wiki_settings.headless_mode` | boolean | 是否使用无头模式 | `true` |
 
 ## 🤖 OneBot 客户端配置
 
-### go-cqhttp 配置
+本插件通过 OneBot V11 协议与QQ客户端连接，支持多种 OneBot 实现：
 
-1. **下载 go-cqhttp**
-   - [官方发布页面](https://github.com/Mrs4s/go-cqhttp/releases)
-   - 选择适合你系统的版本
+### 推荐 OneBot 实现
 
-2. **配置 config.yml**
-```yaml
-account:
-  uin: 你的机器人QQ号
-  password: '你的机器人QQ密码'
-
-heartbeat:
-  interval: 5
-
-message:
-  post-format: string
-  ignore-invalid-cqcode: false
-  force-fragment: false
-  fix-url: false
-  proxy-rewrite: ''
-  report-self-message: false
-  remove-reply-at: false
-  extra-reply-data: false
-  skip-mime-scan: false
-
-output:
-  log-level: warn
-  log-aging: 15
-  log-force-new: true
-  log-colorful: true
-  debug: false
-
-default-middlewares: &default
-  access-token: ''
-  filter: ''
-  rate-limit:
-    enabled: false
-    frequency: 1
-    bucket: 1
-
-database:
-  leveldb:
-    enable: true
-
-servers:
-  - ws:
-      address: 127.0.0.1:3001
-      middlewares:
-        <<: *default
-```
-
-3. **启动 go-cqhttp**
-```bash
-# Windows
-./go-cqhttp.exe
-
-# Linux/macOS
-./go-cqhttp
-```
-
-### 其他 OneBot 实现
-
-- **[NapCat](https://github.com/NapNeko/NapCat)** - 现代化 OneBot 实现
-- **[Lagrange](https://github.com/LagrangeDev/Lagrange.Core)** - C# 实现的 OneBot
+- **[NapCat](https://github.com/NapNeko/NapCat)** - 现代化 OneBot 实现，基于官方 NTQQ
+- **[Lagrange](https://github.com/LagrangeDev/Lagrange.Core)** - C# 实现的 OneBot，稳定性好
 - **[LLOneBot](https://github.com/LLOneBot/LLOneBot)** - 基于 LiteLoader 的实现
+
+### 基本配置要求
+
+无论使用哪种 OneBot 实现，都需要：
+
+1. **配置WebSocket连接**
+   - 地址: `ws://127.0.0.1:3001` (默认)
+   - 确保端口号与 `.env` 文件中的 `ONEBOT_WS_URLS` 一致
+
+2. **设置访问令牌**(可选)
+   - 如果 OneBot 客户端设置了 access_token
+   - 需要在 `.env` 中配置 `ONEBOT_ACCESS_TOKEN`
+
+3. **启用必要功能**
+   - 消息接收和发送
+   - 群组消息处理
+   - 私聊消息处理
+
+### 连接测试
+
+启动 OneBot 客户端后，可以通过以下方式测试连接：
+
+```bash
+# 检查端口监听
+netstat -tlnp | grep 3001
+
+# 测试WebSocket连接
+telnet 127.0.0.1 3001
+```
 
 ## 🗂️ 目录结构
 
@@ -243,8 +237,7 @@ my-dst-bot/
 ├── .env                          # 环境变量配置
 ├── bot.py                        # 启动文件
 ├── config/
-│   └── config/
-│       └── app_config.json       # DMP配置文件
+│   └── app_config.json           # DMP配置文件
 ├── data/
 │   └── database/                 # 数据库文件
 │       ├── chat_history.db       # 聊天记录
@@ -287,13 +280,24 @@ my-dst-bot/
 
 如果配置正确，应该显示服务器信息。如果出错，检查 DMP 配置。
 
-### 3. 物品查询测试
+### 3. Wiki截图测试
 
 ```
 /物品 大理石
 ```
 
-应该返回物品的 Wiki 截图或相关信息。
+应该返回物品的 Wiki 截图。如果截图失败，请检查：
+- Chrome/Chromium 是否正确安装
+- 网络连接是否正常
+- Selenium 驱动是否安装
+
+### 4. 服务器浏览测试
+
+```
+/查房
+```
+
+应该返回 DST 官方服务器列表。
 
 ## ❌ 常见问题和解决方案
 
@@ -320,7 +324,7 @@ WebSocket connection failed
 ```
 
 **解决方案:**
-1. 检查 go-cqhttp 是否正常启动
+1. 检查 OneBot 客户端是否正常启动
 2. 确认端口号一致 (默认 3001)
 3. 检查防火墙设置
 4. 验证 access_token 配置
@@ -389,18 +393,44 @@ find . -name "*.db-shm" -delete
 3. 查看日志错误信息
 4. 确认集群配置正确
 
-### 问题 7: 物品查询失败
+### 问题 7: Wiki截图失败
+
+**常见错误:**
+```
+WebDriverException: chrome not reachable
+selenium.common.exceptions.WebDriverException
+```
 
 **解决方案:**
 ```bash
+# 安装Chrome/Chromium
+# Ubuntu
+sudo apt-get update && sudo apt-get install -y chromium-browser
+
+# CentOS/RHEL
+sudo yum install -y chromium
+
+# 检查安装
+chromium-browser --version
+
 # 重载物品数据
 /重载物品
 
-# 检查数据库
-ls -la data/database/dst_items.db
-
 # 查看错误日志
 LOG_LEVEL=DEBUG 启动机器人
+```
+
+### 问题 8: 服务器浏览失败
+
+**解决方案:**
+```bash
+# 测试网络连接
+curl -I "https://dstserverlist.appspot.com/"
+
+# 检查DNS解析
+nslookup dstserverlist.appspot.com
+
+# 重启机器人尝试
 ```
 
 ## 🔧 性能优化

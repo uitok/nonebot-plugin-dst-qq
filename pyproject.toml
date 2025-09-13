@@ -1,14 +1,14 @@
 [project]
 name = "nonebot-plugin-dst-qq"
 version = "0.4.5"
-description = "基于 NoneBot2 的饥荒管理平台 (DMP) QQ 机器人插件，支持游戏信息查询、命令执行和消息互通功能"
+description = "🎮 功能丰富的饥荒管理平台 (DMP) QQ 机器人插件，基于 NoneBot2 和 Alconna 构建，提供服务器管理、消息互通、Wiki截图等全方位功能"
 readme = "README.md"
 requires-python = ">=3.9, <4.0"
 authors = [
     {name = "uitok", email = "ui_101@qq.com"}
 ]
 license = {text = "MIT"}
-keywords = ["nonebot", "nonebot2", "plugin", "dst", "dmp", "饥荒", "don't starve together", "qq-bot", "message-exchange"]
+keywords = ["nonebot", "nonebot2", "plugin", "dst", "dmp", "饥荒", "don't starve together", "qq-bot", "message-exchange", "wiki-screenshot", "server-browser", "alconna", "selenium"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "License :: OSI Approved :: MIT License",

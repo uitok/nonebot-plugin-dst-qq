@@ -69,7 +69,7 @@ class WikiScreenshotTool:
         if self.driver:
             try:
                 loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, self.driver.quit)
+                await loop.run_in_executor(None, lambda: self.driver.quit())
                 logger.info("WebDriver已关闭")
             except Exception as e:
                 logger.error(f"关闭WebDriver时出错: {e}")
@@ -110,7 +110,7 @@ class WikiScreenshotTool:
             });
             """
             
-            await loop.run_in_executor(None, driver.execute_script, hide_script, hide_selectors)
+            await loop.run_in_executor(None, lambda: driver.execute_script(hide_script, hide_selectors))
             logger.debug("已隐藏不需要的页面元素")
             
         except Exception as e:
@@ -148,7 +148,7 @@ class WikiScreenshotTool:
             document.body.style.margin = '0';
             """
             
-            await loop.run_in_executor(None, driver.execute_script, hide_script)
+            await loop.run_in_executor(None, lambda: driver.execute_script(hide_script))
             logger.debug("已隐藏导航元素")
             
         except Exception as e:
@@ -192,7 +192,7 @@ class WikiScreenshotTool:
             });
             """
             
-            await loop.run_in_executor(None, driver.execute_script, optimize_script)
+            await loop.run_in_executor(None, lambda: driver.execute_script(optimize_script))
             logger.debug("已优化内容显示")
             
         except Exception as e:
@@ -251,7 +251,7 @@ class WikiScreenshotTool:
                 
                 # 在事件循环中访问页面
                 loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, driver.get, url)
+                await loop.run_in_executor(None, lambda: driver.get(url))
                 
                 # 等待页面加载完成
                 await self._wait_for_page_load(driver)
@@ -320,13 +320,13 @@ class WikiScreenshotTool:
                 await self._hide_navigation_elements(driver)
                 await asyncio.sleep(1)
                 # 整页截图
-                screenshot_bytes = await loop.run_in_executor(None, driver.get_screenshot_as_png)
+                screenshot_bytes = await loop.run_in_executor(None, lambda: driver.get_screenshot_as_png())
                 return screenshot_bytes
             
             # 滚动到元素顶部
-            await loop.run_in_executor(None, driver.execute_script, 
-                                     "arguments[0].scrollIntoView({block: 'start', behavior: 'smooth'});", 
-                                     element)
+            await loop.run_in_executor(None, lambda: driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'start', behavior: 'smooth'});", 
+                element))
             await asyncio.sleep(2)  # 等待滚动完成
             
             # 如果是整个内容区域，尝试优化显示
@@ -336,7 +336,7 @@ class WikiScreenshotTool:
                 await asyncio.sleep(1)
             
             # 截图指定元素
-            screenshot_bytes = await loop.run_in_executor(None, lambda: element.screenshot_as_png)
+            screenshot_bytes = await loop.run_in_executor(None, lambda: element.screenshot_as_png())
             
             # 检查截图是否有效
             if screenshot_bytes and len(screenshot_bytes) > 1000:  # 至少1KB
@@ -353,11 +353,244 @@ class WikiScreenshotTool:
                 # 隐藏导航元素后截图
                 await self._hide_navigation_elements(driver)
                 await asyncio.sleep(1)
-                screenshot_bytes = await loop.run_in_executor(None, driver.get_screenshot_as_png)
+                screenshot_bytes = await loop.run_in_executor(None, lambda: driver.get_screenshot_as_png())
                 return screenshot_bytes
             except Exception as fallback_e:
                 logger.error(f"fallback截图也失败: {fallback_e}")
                 return None
+    
+    async def _get_adaptive_screenshot_size(self, driver, element) -> tuple:
+        """获取自适应截图尺寸"""
+        try:
+            loop = asyncio.get_event_loop()
+            
+            # 获取元素的实际内容大小
+            size_script = """
+            var element = arguments[0];
+            var rect = element.getBoundingClientRect();
+            var scrollHeight = element.scrollHeight;
+            var scrollWidth = element.scrollWidth;
+            var clientHeight = element.clientHeight;
+            var clientWidth = element.clientWidth;
+            
+            return {
+                scrollHeight: scrollHeight,
+                scrollWidth: scrollWidth,
+                clientHeight: clientHeight,
+                clientWidth: clientWidth,
+                rectHeight: rect.height,
+                rectWidth: rect.width
+            };
+            """
+            
+            size_info = await loop.run_in_executor(None, lambda: driver.execute_script(size_script, element))
+            
+            # 计算适当的尺寸
+            width = max(size_info['scrollWidth'], size_info['clientWidth'], 800)
+            height = max(size_info['scrollHeight'], size_info['clientHeight'])
+            
+            # 限制最大尺寸以避免截图过大
+            max_width = 1200
+            max_height = 2000
+            
+            if width > max_width:
+                width = max_width
+            if height > max_height:
+                height = max_height
+                
+            logger.debug(f"自适应截图尺寸: {width}x{height}")
+            return (int(width), int(height))
+            
+        except Exception as e:
+            logger.warning(f"获取自适应尺寸失败: {e}")
+            return (800, 600)  # 默认尺寸
+    
+    async def _screenshot_infobox(self, driver) -> Optional[bytes]:
+        """单独截图信息框"""
+        try:
+            loop = asyncio.get_event_loop()
+            
+            # 尝试多种信息框选择器
+            infobox_selectors = [
+                "table.infobox",
+                "table[class*='infobox']",
+                ".infobox",
+                "table.wikitable:first-of-type",
+                "table[style*='float:right']",
+                "table[align='right']"
+            ]
+            
+            infobox = None
+            for selector in infobox_selectors:
+                try:
+                    elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                    for element in elements:
+                        if element.is_displayed() and element.size['height'] > 100:
+                            # 检查是否真的是信息框（通常包含图片或位于右侧）
+                            style = element.get_attribute('style') or ''
+                            if 'float:right' in style or 'float: right' in style:
+                                infobox = element
+                                logger.info(f"找到信息框: {selector}")
+                                break
+                    if infobox:
+                        break
+                except NoSuchElementException:
+                    continue
+            
+            if not infobox:
+                logger.info("未找到信息框")
+                return None
+            
+            # 滚动到信息框
+            await loop.run_in_executor(None, lambda: driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'start', behavior: 'instant'});",
+                infobox))
+            await asyncio.sleep(1)
+            
+            # 获取自适应尺寸
+            width, height = await self._get_adaptive_screenshot_size(driver, infobox)
+            
+            # 截图信息框
+            screenshot_bytes = await loop.run_in_executor(None, lambda: infobox.screenshot_as_png())
+            
+            if screenshot_bytes and len(screenshot_bytes) > 1000:
+                logger.info(f"信息框截图成功，尺寸: {len(screenshot_bytes)} bytes")
+                return screenshot_bytes
+            else:
+                logger.warning("信息框截图失败或尺寸过小")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"截图信息框时出错: {e}")
+            return None
+    
+    async def _screenshot_main_content_without_infobox(self, driver) -> Optional[bytes]:
+        """截图正文内容（排除信息框）"""
+        try:
+            loop = asyncio.get_event_loop()
+            
+            # 隐藏信息框
+            hide_infobox_script = """
+            var infoboxSelectors = [
+                'table.infobox',
+                'table[class*="infobox"]',
+                '.infobox',
+                'table[style*="float:right"]',
+                'table[align="right"]'
+            ];
+            
+            infoboxSelectors.forEach(function(selector) {
+                var elements = document.querySelectorAll(selector);
+                elements.forEach(function(el) {
+                    var style = el.getAttribute('style') || '';
+                    if (style.includes('float:right') || style.includes('float: right')) {
+                        el.style.display = 'none';
+                    }
+                });
+            });
+            """
+            
+            await loop.run_in_executor(None, lambda: driver.execute_script(hide_infobox_script))
+            
+            # 等待DOM更新
+            await asyncio.sleep(1)
+            
+            # 寻找主要内容区域
+            content_selectors = [
+                ".mw-parser-output",
+                "#mw-content-text .mw-parser-output",
+                "#mw-content-text"
+            ]
+            
+            element = None
+            for selector in content_selectors:
+                try:
+                    element = driver.find_element(By.CSS_SELECTOR, selector)
+                    if element and element.is_displayed() and element.size['height'] > 100:
+                        logger.info(f"找到正文内容区域: {selector}")
+                        break
+                except NoSuchElementException:
+                    continue
+            
+            if not element:
+                logger.warning("未找到正文内容区域")
+                return None
+            
+            # 优化内容显示
+            await self._optimize_content_display(driver)
+            
+            # 滚动到内容开始
+            await loop.run_in_executor(None, lambda: driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'start', behavior: 'instant'});",
+                element))
+            await asyncio.sleep(1)
+            
+            # 获取自适应尺寸
+            width, height = await self._get_adaptive_screenshot_size(driver, element)
+            
+            # 截图正文内容
+            screenshot_bytes = await loop.run_in_executor(None, lambda: element.screenshot_as_png())
+            
+            if screenshot_bytes and len(screenshot_bytes) > 1000:
+                logger.info(f"正文内容截图成功，尺寸: {len(screenshot_bytes)} bytes")
+                return screenshot_bytes
+            else:
+                logger.warning("正文内容截图失败或尺寸过小")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"截图正文内容时出错: {e}")
+            return None
+    
+    async def screenshot_wiki_separate(self, item_name: str) -> dict:
+        """分别截图信息栏和正文内容"""
+        async with self._driver_lock:
+            try:
+                driver = await self._get_driver()
+                if not driver:
+                    return {'infobox': None, 'content': None}
+                
+                # 构建Wiki URL
+                encoded_name = urllib.parse.quote(item_name)
+                url = f"https://dontstarve.huijiwiki.com/wiki/{encoded_name}"
+                
+                logger.info(f"正在访问Wiki页面进行分离截图: {url}")
+                
+                # 访问页面
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, lambda: driver.get(url))
+                
+                # 等待页面加载完成
+                await self._wait_for_page_load(driver)
+                await asyncio.sleep(3)
+                
+                # 隐藏不需要的元素
+                await self._hide_unwanted_elements(driver)
+                
+                results = {'infobox': None, 'content': None}
+                
+                # 截图信息框
+                logger.info("开始截图信息框")
+                infobox_bytes = await self._screenshot_infobox(driver)
+                results['infobox'] = infobox_bytes
+                
+                # 重新加载页面以获取完整内容
+                await loop.run_in_executor(None, lambda: driver.get(url))
+                await self._wait_for_page_load(driver)
+                await asyncio.sleep(2)
+                await self._hide_unwanted_elements(driver)
+                
+                # 截图正文内容（不包含信息框）
+                logger.info("开始截图正文内容")
+                content_bytes = await self._screenshot_main_content_without_infobox(driver)
+                results['content'] = content_bytes
+                
+                logger.info(f"分离截图完成 - 信息框: {'成功' if results['infobox'] else '失败'}, 正文: {'成功' if results['content'] else '失败'}")
+                return results
+                
+            except Exception as e:
+                logger.error(f"分离截图时出错: {e}")
+                return {'infobox': None, 'content': None}
     
     async def screenshot_wiki_sections(self, item_name: str) -> List[bytes]:
         """截图Wiki页面的各个章节（高级功能）"""
@@ -375,7 +608,7 @@ class WikiScreenshotTool:
                 
                 # 访问页面
                 loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, driver.get, url)
+                await loop.run_in_executor(None, lambda: driver.get(url))
                 await asyncio.sleep(3)
                 
                 screenshots = []
@@ -384,7 +617,7 @@ class WikiScreenshotTool:
                 try:
                     infobox = driver.find_element(By.XPATH, "//table[contains(@class,'infobox')]")
                     if infobox and infobox.is_displayed():
-                        screenshot_bytes = await loop.run_in_executor(None, infobox.screenshot_as_png)
+                        screenshot_bytes = await loop.run_in_executor(None, lambda: infobox.screenshot_as_png())
                         screenshots.append(screenshot_bytes)
                         logger.info("信息框截图成功")
                 except NoSuchElementException:
@@ -402,14 +635,14 @@ class WikiScreenshotTool:
                                 continue
                                 
                             # 滚动到标题
-                            await loop.run_in_executor(None, driver.execute_script, "arguments[0].scrollIntoView();", heading)
+                            await loop.run_in_executor(None, lambda: driver.execute_script("arguments[0].scrollIntoView();", heading))
                             await asyncio.sleep(1)
                             
                             # 尝试截图该章节的内容
                             # 这是一个简化实现，实际可能需要更复杂的逻辑来确定章节边界
                             section_element = heading.find_element(By.XPATH, "./following-sibling::*[1]")
                             if section_element and section_element.is_displayed():
-                                screenshot_bytes = await loop.run_in_executor(None, section_element.screenshot_as_png)
+                                screenshot_bytes = await loop.run_in_executor(None, lambda: section_element.screenshot_as_png())
                                 screenshots.append(screenshot_bytes)
                                 logger.info(f"章节 '{title}' 截图成功")
                                 
@@ -445,6 +678,15 @@ async def screenshot_wiki_item(item_name: str) -> Optional[bytes]:
     except Exception as e:
         logger.error(f"截图Wiki物品失败: {e}")
         return None
+
+async def screenshot_wiki_item_separate(item_name: str) -> dict:
+    """分别截图指定物品的信息栏和正文内容"""
+    try:
+        tool = await get_wiki_screenshot_tool()
+        return await tool.screenshot_wiki_separate(item_name)
+    except Exception as e:
+        logger.error(f"分离截图Wiki物品失败: {e}")
+        return {'infobox': None, 'content': None}
 
 async def cleanup_screenshot_tool():
     """清理截图工具资源"""

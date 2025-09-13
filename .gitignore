@@ -186,6 +186,7 @@ test_*
 *_test.py
 
 # Configuration files with sensitive data
+config/app_config.json
 app_config.json
 app_config.backup.json
 *.json.bak
