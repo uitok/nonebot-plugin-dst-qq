@@ -51,6 +51,27 @@ class MessageDedup:
 # 全局去重器实例
 _dedup_instance = MessageDedup(window_seconds=10)
 
+# 用户图片模式设置 - 存储启用图片模式的用户ID
+_user_image_modes = set()
+
+def add_user_image_mode(user_id: str):
+    """为用户启用图片模式"""
+    _user_image_modes.add(str(user_id))
+    print(f"🎨 用户 {user_id} 已启用图片模式")
+
+def remove_user_image_mode(user_id: str):
+    """为用户禁用图片模式"""
+    _user_image_modes.discard(str(user_id))
+    print(f"📝 用户 {user_id} 已禁用图片模式")
+
+def is_user_image_mode(user_id: str) -> bool:
+    """检查用户是否启用了图片模式"""
+    return str(user_id) in _user_image_modes
+
+def get_image_mode_users() -> set:
+    """获取所有启用图片模式的用户"""
+    return _user_image_modes.copy()
+
 def dedup_message(func):
     """消息去重装饰器"""
     @wraps(func)

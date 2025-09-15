@@ -13,96 +13,8 @@ from .server_browser import dst_browser
 from .message_utils import send_message, handle_command_errors
 from .utils import require_admin
 
-# 查房命令
-server_list_cmd = on_alconna(
-    Alconna("查房", Args["keyword?", str]),
-    aliases={"服务器列表", "server_list", "查服务器"},
-    priority=2,
-    block=True
-)
-
-@server_list_cmd.handle()
-@handle_command_errors("查房")
-async def handle_server_list(bot: Bot, event: Event, keyword: Match[str]):
-    """处理查房命令"""
-    search_keyword = keyword.result if keyword.available else ""
-    user_id = str(event.get_user_id())
-    
-    # 发送查询提示
-    await send_message(bot, event, "🔍 正在查询DST服务器列表...")
-    
-    try:
-        # 搜索服务器
-        result = await dst_browser.search_servers(
-            keyword=search_keyword,
-            region="ap-east-1",  # 默认亚太区
-            platform="steam",   # 默认Steam平台
-            max_results=15      # 增加结果数量用于选择
-        )
-        
-        if result.success and result.data:
-            servers = result.data
-            
-            # 如果只有1个服务器，直接显示详细信息
-            if len(servers) == 1:
-                formatted_text = dst_browser.format_server_info(servers[0])
-                formatted_text = f"🏠 找到1个服务器{f' (搜索: {search_keyword})' if search_keyword else ''}\\n\\n" + formatted_text
-                await send_message(bot, event, formatted_text)
-                return
-            
-            # 多个服务器时显示选择列表
-            list_text = f"🔍 找到 {len(servers)} 个服务器" + (f" (搜索: {search_keyword})" if search_keyword else "") + "\\n\\n"
-            
-            for i, server in enumerate(servers, 1):
-                name = server.get("name", "未知服务器")
-                connected = server.get("connected", 0)
-                max_conn = server.get("max_connections", 0)
-                password = "🔒" if server.get("password", False) else "🔓"
-                list_text += f"{i}. {name} ({connected}/{max_conn}) {password}\\n"
-            
-            list_text += "\\n💡 回复序号查看详细信息 (如: 1)"
-            await send_message(bot, event, list_text)
-            
-            # 等待用户选择
-            @waiter(waits=["message"], keep_session=True)
-            async def wait_for_choice(waiter_event: Event):
-                if str(waiter_event.get_user_id()) != user_id:
-                    return False
-                
-                message_text = str(waiter_event.get_message()).strip()
-                if message_text.isdigit():
-                    choice = int(message_text)
-                    if 1 <= choice <= len(servers):
-                        return choice
-                return False
-            
-            try:
-                choice = await wait_for_choice.wait(timeout=30)
-                if choice:
-                    selected_server = servers[choice - 1]
-                    detailed_info = dst_browser.format_server_info(selected_server)
-                    detailed_info = f"🏠 服务器详情 #{choice}\\n\\n" + detailed_info
-                    
-                    # 添加连接信息
-                    host = selected_server.get("host", "")
-                    port = selected_server.get("port", 0)
-                    if host and port:
-                        detailed_info += f"\\n\\n🌐 连接地址: {host}:{port}"
-                    
-                    await send_message(bot, event, detailed_info)
-                else:
-                    await send_message(bot, event, "⏰ 选择超时，请重新查询")
-            except Exception as e:
-                logger.error(f"等待用户选择时出错: {e}")
-                await send_message(bot, event, "⏰ 选择超时，请重新查询")
-                
-        else:
-            error_msg = result.message if result.message else "查询失败"
-            await send_message(bot, event, f"❌ {error_msg}")
-            
-    except Exception as e:
-        logger.error(f"查房命令执行失败: {e}")
-        await send_message(bot, event, f"❌ 查房失败: {str(e)}")
+# 旧版查房功能已完全迁移至 server_browser_commands.py
+# 移除旧代码以简化项目结构
 
 # 区域服务器列表命令
 region_servers_cmd = on_alconna(
@@ -173,49 +85,7 @@ async def handle_region_servers(bot: Bot, event: Event, region: Match[str]):
             logger.error(f"获取区域概况失败: {e}")
             await send_message(bot, event, f"❌ 获取失败: {str(e)}")
 
-# 热门服务器命令
-popular_servers_cmd = on_alconna(
-    Alconna("热门服务器"),
-    aliases={"popular_servers", "热门房间"},
-    priority=2,
-    block=True
-)
-
-@popular_servers_cmd.handle()
-@handle_command_errors("热门服务器查询")
-async def handle_popular_servers(bot: Bot, event: Event):
-    """处理热门服务器查询命令"""
-    
-    await send_message(bot, event, "🔥 正在查询热门服务器...")
-    
-    try:
-        # 获取亚太区服务器
-        result = await dst_browser.search_servers(
-            region="ap-east-1",
-            max_results=20  # 获取更多服务器用于筛选
-        )
-        
-        if result.success and result.data:
-            # 按在线人数排序，取前8个
-            servers = result.data
-            popular_servers = sorted(
-                servers,
-                key=lambda x: x.get('connected', 0),
-                reverse=True
-            )[:8]
-            
-            if popular_servers:
-                formatted_text = dst_browser.format_server_list(popular_servers)
-                formatted_text = "🔥 " + formatted_text.replace("🔍 找到", "热门服务器", 1)
-                await send_message(bot, event, formatted_text)
-            else:
-                await send_message(bot, event, "❌ 未找到热门服务器")
-        else:
-            await send_message(bot, event, "❌ 获取热门服务器失败")
-            
-    except Exception as e:
-        logger.error(f"热门服务器查询失败: {e}")
-        await send_message(bot, event, f"❌ 查询失败: {str(e)}")
+# 热门服务器功能已合并至 server_browser_commands.py
 
 # 服务器详情命令（管理员专用）
 server_detail_cmd = on_alconna(

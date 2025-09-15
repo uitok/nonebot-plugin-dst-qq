@@ -59,11 +59,25 @@ pip install nonebot2[fastapi] nonebot-adapter-onebot nonebot-plugin-dst-qq
 # 或者手动安装全部依赖
 pip install nonebot2[fastapi] nonebot-adapter-onebot nonebot-plugin-alconna \
             nonebot-plugin-localstore nonebot-plugin-apscheduler nonebot-plugin-waiter \
-            httpx pydantic aiosqlite selenium watchdog
+            httpx pydantic aiosqlite selenium
 
 # 使用 poetry (推荐)
 poetry init
 poetry add nonebot2[fastapi] nonebot-adapter-onebot nonebot-plugin-dst-qq
+```
+
+**注意：NoneBot插件需要手动安装**
+
+由于NoneBot2的插件加载机制，以下插件需要手动安装：
+```bash
+# 必需的NoneBot插件
+pip install nonebot-plugin-alconna      # 命令解析
+pip install nonebot-plugin-localstore  # 本地存储
+pip install nonebot-plugin-apscheduler # 任务调度
+pip install nonebot-plugin-waiter      # 会话等待
+
+# 验证安装
+python -c "import nonebot_plugin_alconna, nonebot_plugin_localstore, nonebot_plugin_apscheduler, nonebot_plugin_waiter; print('所有插件安装成功')"
 ```
 
 3. **创建启动文件**
@@ -102,7 +116,7 @@ LOG_LEVEL=INFO
 
 # OneBot V11 连接配置
 ONEBOT_WS_URLS=["ws://127.0.0.1:3001"]
-# ONEBOT_ACCESS_TOKEN="your-access-token"  # 如果OneBot客户端设置了token
+# ONEBOT_ACCESS_TOKEN="your-access-token"  设置了token
 
 # 超级用户 (你的QQ号)
 SUPERUSERS=["123456789"]
@@ -191,42 +205,72 @@ SESSION_EXPIRE_TIMEOUT=120
 
 ## 🤖 OneBot 客户端配置
 
-本插件通过 OneBot V11 协议与QQ客户端连接，支持多种 OneBot 实现：
+### go-cqhttp 配置
 
-### 推荐 OneBot 实现
+1. **下载 go-cqhttp**
+   - [官方发布页面](https://github.com/Mrs4s/go-cqhttp/releases)
+   - 选择适合你系统的版本
 
-- **[NapCat](https://github.com/NapNeko/NapCat)** - 现代化 OneBot 实现，基于官方 NTQQ
-- **[Lagrange](https://github.com/LagrangeDev/Lagrange.Core)** - C# 实现的 OneBot，稳定性好
-- **[LLOneBot](https://github.com/LLOneBot/LLOneBot)** - 基于 LiteLoader 的实现
+2. **配置 config.yml**
+```yaml
+account:
+  uin: 你的机器人QQ号
+  password: '你的机器人QQ密码'
 
-### 基本配置要求
+heartbeat:
+  interval: 5
 
-无论使用哪种 OneBot 实现，都需要：
+message:
+  post-format: string
+  ignore-invalid-cqcode: false
+  force-fragment: false
+  fix-url: false
+  proxy-rewrite: ''
+  report-self-message: false
+  remove-reply-at: false
+  extra-reply-data: false
+  skip-mime-scan: false
 
-1. **配置WebSocket连接**
-   - 地址: `ws://127.0.0.1:3001` (默认)
-   - 确保端口号与 `.env` 文件中的 `ONEBOT_WS_URLS` 一致
+output:
+  log-level: warn
+  log-aging: 15
+  log-force-new: true
+  log-colorful: true
+  debug: false
 
-2. **设置访问令牌**(可选)
-   - 如果 OneBot 客户端设置了 access_token
-   - 需要在 `.env` 中配置 `ONEBOT_ACCESS_TOKEN`
+default-middlewares: &default
+  access-token: ''
+  filter: ''
+  rate-limit:
+    enabled: false
+    frequency: 1
+    bucket: 1
 
-3. **启用必要功能**
-   - 消息接收和发送
-   - 群组消息处理
-   - 私聊消息处理
+database:
+  leveldb:
+    enable: true
 
-### 连接测试
-
-启动 OneBot 客户端后，可以通过以下方式测试连接：
-
-```bash
-# 检查端口监听
-netstat -tlnp | grep 3001
-
-# 测试WebSocket连接
-telnet 127.0.0.1 3001
+servers:
+  - ws:
+      address: 127.0.0.1:3001
+      middlewares:
+        <<: *default
 ```
+
+3. **启动 go-cqhttp**
+```bash
+# Windows
+./go-cqhttp.exe
+
+# Linux/macOS
+./go-cqhttp
+```
+
+### 其他 OneBot 实现
+
+- **[NapCat](https://github.com/NapNeko/NapCat)** - 现代化 OneBot 实现
+- **[Lagrange](https://github.com/LagrangeDev/Lagrange.Core)** - C# 实现的 OneBot
+- **[LLOneBot](https://github.com/LLOneBot/LLOneBot)** - 基于 LiteLoader 的实现
 
 ## 🗂️ 目录结构
 
@@ -304,18 +348,34 @@ my-dst-bot/
 ### 问题 1: 插件加载失败
 ```
 ModuleNotFoundError: No module named 'nonebot_plugin_dst_qq'
+或
+ModuleNotFoundError: No module named 'nonebot_plugin_alconna'
 ```
 
 **解决方案:**
 ```bash
-# 确认安装
+# 确认主插件安装
 pip list | grep nonebot-plugin-dst-qq
 
-# 重新安装
+# 确认所有依赖插件安装
+pip list | grep -E "(alconna|localstore|apscheduler|waiter)"
+
+# 重新安装主插件
 pip install --upgrade nonebot-plugin-dst-qq
 
-# 检查Python环境
-python -c "import nonebot_plugin_dst_qq; print('OK')"
+# 重新安装所有必需的NoneBot插件
+pip install --upgrade nonebot-plugin-alconna nonebot-plugin-localstore \
+                      nonebot-plugin-apscheduler nonebot-plugin-waiter
+
+# 检查所有模块
+python -c "
+import nonebot_plugin_dst_qq
+import nonebot_plugin_alconna
+import nonebot_plugin_localstore  
+import nonebot_plugin_apscheduler
+import nonebot_plugin_waiter
+print('✅ 所有插件安装成功')
+"
 ```
 
 ### 问题 2: OneBot 连接失败
@@ -324,7 +384,7 @@ WebSocket connection failed
 ```
 
 **解决方案:**
-1. 检查 OneBot 客户端是否正常启动
+1. 检查 go-cqhttp 是否正常启动
 2. 确认端口号一致 (默认 3001)
 3. 检查防火墙设置
 4. 验证 access_token 配置
