@@ -8,6 +8,7 @@ import urllib.parse
 from typing import Optional, List
 
 from nonebot import logger
+from nonebot_plugin_htmlrender import get_browser, html_to_pic
 
 
 class WikiScreenshotTool:
@@ -359,8 +360,6 @@ class WikiScreenshotTool:
     async def screenshot_wiki_page(self, item_name: str) -> Optional[bytes]:
         """截图Wiki页面的主要内容区域"""
         try:
-            # 延迟导入 htmlrender
-            from nonebot_plugin_htmlrender import get_browser
             
             # 直接使用 playwright 访问页面
             encoded_name = urllib.parse.quote(item_name)
@@ -522,8 +521,6 @@ class WikiScreenshotTool:
     async def screenshot_wiki_separate(self, item_name: str) -> dict:
         """分别截图信息栏和正文内容"""
         try:
-            # 延迟导入 htmlrender
-            from nonebot_plugin_htmlrender import html_to_pic
             
             # 获取HTML内容
             html_content = await self._get_wiki_html(item_name)
@@ -576,8 +573,6 @@ class WikiScreenshotTool:
     async def screenshot_wiki_sections(self, item_name: str) -> List[bytes]:
         """截图Wiki页面的各个章节（高级功能）"""
         try:
-            # 延迟导入 htmlrender
-            from nonebot_plugin_htmlrender import html_to_pic
             
             # 获取HTML内容
             html_content = await self._get_wiki_html(item_name)

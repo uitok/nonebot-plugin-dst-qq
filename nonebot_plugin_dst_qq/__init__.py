@@ -1,6 +1,9 @@
 from pathlib import Path
 import nonebot
-from nonebot.plugin import PluginMetadata
+from nonebot.plugin import PluginMetadata, require
+
+# 声明插件依赖
+require("nonebot_plugin_htmlrender")
 
 from .config import PluginConfig
 
