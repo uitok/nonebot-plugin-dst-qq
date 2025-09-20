@@ -6,6 +6,8 @@
 from nonebot import logger
 from .connection import DatabaseManager
 from .models import ChatHistoryModel, ItemWikiModel, ArchiveModel
+from ..item_data import ITEM_NAME_MAPPING, search_items as builtin_search
+from ..wiki_screenshot import screenshot_wiki_item
 
 # 全局数据库管理器实例
 db_manager = DatabaseManager()
@@ -91,7 +93,6 @@ class ItemWikiManager:
     async def _load_builtin_items(self):
         """加载内置物品数据"""
         try:
-            from ..item_data import ITEM_NAME_MAPPING
             for english_name, chinese_name in ITEM_NAME_MAPPING.items():
                 # 为兼容性，添加默认类别和描述
                 await self.model.add_item(
@@ -110,7 +111,6 @@ class ItemWikiManager:
         """快速搜索物品（同步方法，用于向下兼容）"""
         try:
             # 使用内置数据进行快速搜索
-            from ..item_data import search_items as builtin_search
             results = builtin_search(keyword)[:limit]
             
             # 转换为数据库格式
@@ -134,7 +134,6 @@ class ItemWikiManager:
             logger.info(f"尝试获取Wiki图片: {item_name}")
             
             # 使用新的Wiki截图工具
-            from ..wiki_screenshot import screenshot_wiki_item
             screenshot_bytes = await screenshot_wiki_item(item_name)
             
             if screenshot_bytes:

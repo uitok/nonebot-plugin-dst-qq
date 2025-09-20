@@ -11,6 +11,8 @@ from nonebot import logger
 
 from .message_utils import send_message, handle_command_errors
 from .utils import require_admin
+from .simple_cache import get_cache
+from .config import get_config
 
 # 缓存管理命令
 cache_status_cmd = on_alconna(
@@ -26,7 +28,6 @@ cache_status_cmd = on_alconna(
 async def handle_cache_status(bot: Bot, event: Event):
     """显示缓存统计信息"""
     try:
-        from .simple_cache import get_cache
         cache = get_cache()
         stats = cache.get_stats()
         

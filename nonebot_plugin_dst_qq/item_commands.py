@@ -14,6 +14,7 @@ from nonebot_plugin_waiter import waiter
 from .database import item_wiki_manager
 from .message_utils import send_message, handle_command_errors
 from .wiki_screenshot import screenshot_wiki_item_separate
+from .item_data import get_total_count, __version__
 
 # ========================================
 # 物品查询命令
@@ -374,7 +375,6 @@ item_stats_cmd = on_alconna(
 async def handle_item_stats(bot: Bot, event: Event):
     """处理物品统计信息命令"""
     # 直接使用内置数据获取统计信息
-    from .item_data import get_total_count, __version__
     total_items = get_total_count()
     
     result_text = f"📊 物品数据统计\n\n" \

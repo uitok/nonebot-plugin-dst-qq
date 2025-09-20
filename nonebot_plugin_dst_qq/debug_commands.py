@@ -9,6 +9,9 @@ from arclet.alconna import Alconna
 from nonebot import logger
 from .message_utils import send_message, handle_command_errors
 from .utils import require_admin
+from .config import get_config
+from .simple_cache import get_cache
+from .database import chat_history_db
 
 # 连接测试命令（管理员专用）
 test_connection_cmd = on_alconna(
@@ -30,7 +33,6 @@ async def handle_test_connection(bot: Bot, event: Event):
     
     # 测试DMP连接
     try:
-        from .config import get_config
         config = get_config()
         results.append(f"✅ 配置已加载: {config.dmp.base_url}")
     except Exception as e:
@@ -38,7 +40,6 @@ async def handle_test_connection(bot: Bot, event: Event):
     
     # 测试缓存系统
     try:
-        from .simple_cache import get_cache
         cache = get_cache()
         await cache.get("test_key")
         results.append("✅ 缓存系统正常")
@@ -47,7 +48,6 @@ async def handle_test_connection(bot: Bot, event: Event):
     
     # 测试数据库
     try:
-        from .database import chat_history_db
         await chat_history_db.get_recent_messages(1)
         results.append("✅ 数据库连接正常")
     except Exception as e:

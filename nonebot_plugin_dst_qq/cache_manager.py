@@ -3,7 +3,7 @@
 将旧的复杂缓存接口适配到新的简化缓存系统
 """
 
-from .simple_cache import SimpleCache, get_cache
+from .simple_cache import SimpleCache, get_cache, cached as simple_cached
 
 
 # 为了兼容性，提供旧的接口
@@ -66,7 +66,6 @@ cache_manager = CacheManager()
 # 装饰器兼容
 def cached(cache_type="api", memory_ttl=300, file_ttl=600, **kwargs):
     """兼容旧的cached装饰器"""
-    from .simple_cache import cached as simple_cached
     ttl = memory_ttl or file_ttl or 300
     key_prefix = cache_type
     return simple_cached(ttl_seconds=ttl, key_prefix=key_prefix)

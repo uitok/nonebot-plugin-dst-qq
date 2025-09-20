@@ -7,6 +7,9 @@ Don't Starve Together Item Name Mapping Data
 此模块包含饥荒物品中英文对照数据，无需外部文件依赖
 """
 
+# 版本信息
+__version__ = "5.0"
+
 # 物品名对照字典
 ITEM_NAME_MAPPING = {
     'abigail': '阿比盖尔',
@@ -2916,6 +2919,10 @@ def get_item_chinese_name(english_name: str) -> str:
 def get_item_english_name(chinese_name: str) -> str:
     """获取物品英文名"""
     return CHINESE_TO_ENGLISH.get(chinese_name, chinese_name)
+
+def get_total_count() -> int:
+    """获取物品总数量"""
+    return len(ITEM_NAME_MAPPING)
 
 # 统计信息
 TOTAL_ITEMS = len(ITEM_NAME_MAPPING)

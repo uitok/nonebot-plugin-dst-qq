@@ -5,7 +5,19 @@ Wiki截图工具
 
 import asyncio
 import urllib.parse
+import re
+import random
 from typing import Optional, List
+
+try:
+    import httpx
+except ImportError:
+    httpx = None
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
 
 from nonebot import logger
 from nonebot_plugin_htmlrender import get_browser, html_to_pic
@@ -19,13 +31,14 @@ class WikiScreenshotTool:
     
     def _safe_filename(self, name: str) -> str:
         """将文件名安全化"""
-        import re
         return re.sub(r'[\\/*?:"<>|]', "_", name)
     
     async def _get_wiki_html(self, item_name: str) -> Optional[str]:
         """获取Wiki页面的HTML内容，并进行优化处理"""
         try:
-            import httpx
+            if httpx is None:
+                logger.error("httpx 模块未安装")
+                return None
             
             # 构建Wiki URL
             encoded_name = urllib.parse.quote(item_name)
@@ -53,7 +66,6 @@ class WikiScreenshotTool:
                     try:
                         if attempt > 0:
                             logger.info(f"重试获取Wiki页面，第{attempt + 1}次尝试")
-                            import asyncio
                             await asyncio.sleep(1)  # 等待1秒后重试
                         
                         response = await client.get(url, headers=headers)
@@ -103,7 +115,9 @@ class WikiScreenshotTool:
     def _optimize_html_content(self, html_content: str) -> str:
         """优化HTML内容，移除不需要的元素"""
         try:
-            from bs4 import BeautifulSoup
+            if BeautifulSoup is None:
+                logger.warning("BeautifulSoup未安装，使用原始HTML内容")
+                return html_content
             
             soup = BeautifulSoup(html_content, 'html.parser')
             
@@ -194,9 +208,6 @@ class WikiScreenshotTool:
             
             return str(soup)
             
-        except ImportError:
-            logger.warning("BeautifulSoup未安装，使用原始HTML内容")
-            return html_content
         except Exception as e:
             logger.warning(f"优化HTML内容失败: {e}, 使用原始内容")
             return html_content
@@ -204,7 +215,9 @@ class WikiScreenshotTool:
     async def _extract_main_content(self, html_content: str) -> str:
         """提取主要内容区域"""
         try:
-            from bs4 import BeautifulSoup
+            if BeautifulSoup is None:
+                logger.warning("BeautifulSoup未安装，无法提取主要内容")
+                return html_content
             
             soup = BeautifulSoup(html_content, 'html.parser')
             
@@ -242,9 +255,6 @@ class WikiScreenshotTool:
                 logger.warning("未找到主要内容区域，使用完整HTML")
                 return html_content
                 
-        except ImportError:
-            logger.warning("BeautifulSoup未安装，无法提取主要内容")
-            return html_content
         except Exception as e:
             logger.warning(f"提取主要内容失败: {e}")
             return html_content
@@ -252,7 +262,9 @@ class WikiScreenshotTool:
     async def _extract_infobox(self, html_content: str) -> Optional[str]:
         """提取信息框HTML"""
         try:
-            from bs4 import BeautifulSoup
+            if BeautifulSoup is None:
+                logger.warning("BeautifulSoup未安装，无法提取信息框")
+                return None
             
             soup = BeautifulSoup(html_content, 'html.parser')
             
@@ -317,9 +329,6 @@ class WikiScreenshotTool:
             logger.info("未找到信息框")
             return None
             
-        except ImportError:
-            logger.warning("BeautifulSoup未安装，无法提取信息框")
-            return None
         except Exception as e:
             logger.warning(f"提取信息框失败: {e}")
             return None
@@ -327,7 +336,9 @@ class WikiScreenshotTool:
     async def _extract_content_without_infobox(self, html_content: str) -> str:
         """提取正文内容（排除信息框）"""
         try:
-            from bs4 import BeautifulSoup
+            if BeautifulSoup is None:
+                logger.warning("BeautifulSoup未安装，使用原始HTML")
+                return html_content
             
             soup = BeautifulSoup(html_content, 'html.parser')
             
@@ -350,9 +361,6 @@ class WikiScreenshotTool:
             # 提取主要内容
             return await self._extract_main_content(str(soup))
             
-        except ImportError:
-            logger.warning("BeautifulSoup未安装，使用原始HTML")
-            return html_content
         except Exception as e:
             logger.warning(f"提取正文内容失败: {e}")
             return html_content
@@ -395,7 +403,6 @@ class WikiScreenshotTool:
             
             try:
                 # 先等待一个随机时间，模拟人类行为
-                import random
                 await page.wait_for_timeout(random.randint(1000, 3000))
                 
                 # 访问页面，使用更宽松的加载策略
@@ -579,7 +586,10 @@ class WikiScreenshotTool:
             if not html_content:
                 return []
             
-            from bs4 import BeautifulSoup
+            if BeautifulSoup is None:
+                logger.warning("BeautifulSoup未安装，无法分节截图")
+                return []
+            
             soup = BeautifulSoup(html_content, 'html.parser')
             
             screenshots = []

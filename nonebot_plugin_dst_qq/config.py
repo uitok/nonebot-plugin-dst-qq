@@ -1,6 +1,11 @@
 from pathlib import Path
 from typing import List
 from pydantic import BaseModel
+from nonebot import require
+
+# 声明插件依赖
+require("nonebot_plugin_localstore")
+import nonebot_plugin_localstore as store
 
 class DMPConfig(BaseModel):
     """DMP API配置"""
@@ -70,15 +75,12 @@ class Config(BaseModel):
     message: MessageConfig = MessageConfig()
     logging: LoggingConfig = LoggingConfig()
     cache: CacheConfig = CacheConfig()
-    version: str = "0.4.5"
+    version: str = "0.4.9"
 
 # 获取目录的简单函数（延迟加载localstore）
 def get_config_dir() -> Path:
     """获取配置目录 - 使用localstore插件"""
     try:
-        from nonebot import require
-        require("nonebot_plugin_localstore")
-        import nonebot_plugin_localstore as store
         # 使用localstore的配置目录
         return store.get_plugin_config_dir()
     except Exception:
@@ -88,9 +90,6 @@ def get_config_dir() -> Path:
 def get_cache_dir() -> Path:
     """获取缓存目录 - 使用localstore插件"""
     try:
-        from nonebot import require
-        require("nonebot_plugin_localstore")
-        import nonebot_plugin_localstore as store
         # 使用localstore的缓存目录
         return store.get_plugin_cache_dir()
     except Exception:
@@ -100,9 +99,6 @@ def get_cache_dir() -> Path:
 def get_data_dir() -> Path:
     """获取数据目录 - 使用localstore插件"""
     try:
-        from nonebot import require
-        require("nonebot_plugin_localstore")
-        import nonebot_plugin_localstore as store
         # 使用localstore的数据目录
         return store.get_plugin_data_dir()
     except Exception:
