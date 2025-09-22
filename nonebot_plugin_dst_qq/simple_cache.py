@@ -10,10 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Callable
 from functools import wraps
-from nonebot import logger, require
-
-# 声明插件依赖
-require("nonebot_plugin_localstore")
+from nonebot import logger
 import nonebot_plugin_localstore as store
 
 

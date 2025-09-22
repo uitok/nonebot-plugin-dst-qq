@@ -3,6 +3,8 @@ import nonebot
 from nonebot.plugin import PluginMetadata, require
 
 # 声明插件依赖
+require("nonebot_plugin_alconna")
+require("nonebot_plugin_waiter")
 require("nonebot_plugin_htmlrender")
 require("nonebot_plugin_localstore")
 require("nonebot_plugin_apscheduler")

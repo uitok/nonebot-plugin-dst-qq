@@ -15,9 +15,6 @@ from nonebot import require, get_driver
 from nonebot import logger
 from nonebot import get_bot
 
-# 声明插件依赖
-require("nonebot_plugin_apscheduler")
-
 from nonebot_plugin_apscheduler import scheduler
 from .database import chat_history_db, archive_manager
 from .cache_manager import cache_manager

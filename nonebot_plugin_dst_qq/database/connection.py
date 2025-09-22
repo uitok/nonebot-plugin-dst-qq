@@ -8,10 +8,7 @@ import asyncio
 from pathlib import Path
 from typing import Optional, Dict, Any, AsyncGenerator, List
 from contextlib import asynccontextmanager
-from nonebot import logger, require
-
-# 声明插件依赖
-require("nonebot_plugin_localstore")
+from nonebot import logger
 import nonebot_plugin_localstore as store
 
 

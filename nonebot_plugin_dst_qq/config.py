@@ -1,10 +1,6 @@
 from pathlib import Path
 from typing import List
 from pydantic import BaseModel
-from nonebot import require
-
-# 声明插件依赖
-require("nonebot_plugin_localstore")
 import nonebot_plugin_localstore as store
 
 class DMPConfig(BaseModel):
@@ -75,7 +71,7 @@ class Config(BaseModel):
     message: MessageConfig = MessageConfig()
     logging: LoggingConfig = LoggingConfig()
     cache: CacheConfig = CacheConfig()
-    version: str = "0.4.9"
+    version: str = "0.4.10"
 
 # 获取目录的简单函数（延迟加载localstore）
 def get_config_dir() -> Path:
