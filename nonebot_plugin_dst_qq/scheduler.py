@@ -129,6 +129,7 @@ class DataMaintenanceScheduler:
             
             # 执行完整维护流程
             maintenance_result = await chat_history_db.auto_maintenance()
+            archive_summary = await archive_manager.get_archive_summary()
             
             # 额外的深度清理
             cache_clear_result = await self._deep_cache_cleanup()
@@ -137,6 +138,7 @@ class DataMaintenanceScheduler:
             await self._notify_superusers("weekly_maintenance", {
                 "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
                 "maintenance_result": maintenance_result,
+                "archive_summary": archive_summary,
                 "cache_result": cache_clear_result,
                 "stats": self.maintenance_stats
             })
@@ -187,8 +189,9 @@ class DataMaintenanceScheduler:
             
             # 检查缓存状态
             cache_stats = cache_manager.get_stats()
-            if cache_stats["memory_cache_size"] > 200:
-                logger.info(f"📊 内存缓存使用: {cache_stats['memory_cache_size']}/256")
+            memory_entries = cache_stats.get("memory_entries", 0)
+            if memory_entries > 200:
+                logger.info(f"📊 内存缓存使用: {memory_entries}/256")
             
         except Exception as e:
             logger.debug(f"❌ 系统监控失败: {e}")
@@ -207,10 +210,18 @@ class DataMaintenanceScheduler:
             await asyncio.sleep(2)
             
             stats_after = cache_manager.get_stats()
-            
+
+            before_total = stats_before.get("memory_entries", 0) + stats_before.get("file_entries", 0)
+            after_total = stats_after.get("memory_entries", 0) + stats_after.get("file_entries", 0)
+
+            total_requests = stats_after.get("total_requests", 0)
+            hit_rate = stats_after.get("hit_rate", 0)
+            if total_requests > 100 and hit_rate < 0.3:
+                logger.warning(f"⚠️ 缓存命中率较低: {hit_rate:.2%}")
+
             return {
                 "success": True,
-                "cleared_items": stats_before["memory_cache_size"] - stats_after["memory_cache_size"],
+                "cleared_items": max(before_total - after_total, 0),
                 "stats_before": stats_before,
                 "stats_after": stats_after
             }
@@ -251,11 +262,20 @@ class DataMaintenanceScheduler:
         
         report = "📊 每周数据维护报告\n\n"
         report += f"🕐 执行时间: {data.get('start_time')}\n\n"
+        maintenance_success = maintenance.get("success")
+        if maintenance_success is None:
+            maintenance_success = maintenance.get("error") is None
+
+        processed_records = maintenance.get('total_records_processed')
+        if processed_records is None:
+            processed_records = maintenance.get('deleted_records', 0)
+
+        saved_space = maintenance.get('total_space_saved_mb', 0)
         
-        if maintenance.get("success"):
+        if maintenance_success:
             report += "✅ 维护任务: 成功\n"
-            report += f"📝 处理记录: {maintenance.get('total_records_processed', 0):,} 条\n"
-            report += f"💰 节省空间: {maintenance.get('total_space_saved_mb', 0):.2f} MB\n\n"
+            report += f"📝 处理记录: {processed_records:,} 条\n"
+            report += f"💰 节省空间: {saved_space:.2f} MB\n\n"
         else:
             report += f"❌ 维护任务: 失败 - {maintenance.get('error', '未知错误')}\n\n"
         
@@ -265,7 +285,22 @@ class DataMaintenanceScheduler:
         report += f"  成功率: {(stats['successful_runs']/stats['total_runs']*100):.1f}%\n" if stats['total_runs'] > 0 else "  成功率: N/A\n"
         report += f"  累计处理: {stats['total_records_processed']:,} 条\n"
         report += f"  累计节省: {stats['total_space_saved_mb']:.2f} MB"
-        
+
+        archive_summary = data.get("archive_summary")
+        if archive_summary:
+            report += "\n\n📦 归档摘要:\n"
+            report += f"  总归档记录: {archive_summary.get('total_records', 0):,} 条\n"
+            report += f"  归档容量: {archive_summary.get('total_size_mb', 0):.2f} MB\n"
+            recent = archive_summary.get('recent_archives') or []
+            for item in recent[:3]:
+                report += (
+                    f"  • {item.get('archive_date', '未知日期')} | "
+                    f"{item.get('cluster_name', '-')}/{item.get('world_name', '-')}: "
+                    f"{item.get('record_count', 0)} 条\n"
+                )
+            if len(recent) > 3:
+                report += "  • ...\n"
+
         return report
     
     def get_scheduler_stats(self) -> dict:

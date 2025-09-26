@@ -113,6 +113,7 @@ ENVIRONMENT=prod
 HOST=127.0.0.1
 PORT=8080
 LOG_LEVEL=INFO
+DRIVER="~fastapi[websockets]+~httpx"
 
 # OneBot V11 连接配置
 ONEBOT_WS_URLS=["ws://127.0.0.1:3001"]
@@ -141,16 +142,13 @@ SESSION_EXPIRE_TIMEOUT=120
 
 #### 主配置文件位置
 
-插件会按以下优先级查找配置目录：
-1. **工作目录下的config目录** (推荐)
-   ```
-   config/app_config.json
-   ```
-2. **nonebot-plugin-localstore 目录** (系统默认路径)
-   - Linux/macOS: `~/.config/nonebot2/nonebot_plugin_dst_qq/app_config.json`
-   - Windows: `%APPDATA%\nonebot2\nonebot_plugin_dst_qq\app_config.json`
+默认情况下，插件使用 `nonebot-plugin-localstore` 管理配置文件，路径如下：
 
-**推荐使用工作目录下的config目录**，这样配置文件与机器人在同一位置，便于管理。
+- Linux: `~/.local/share/nonebot/plugin/nonebot_plugin_dst_qq/config/app_config.json`
+- macOS: `~/Library/Application Support/nonebot/plugin/nonebot_plugin_dst_qq/config/app_config.json`
+- Windows: `%APPDATA%\nonebot\plugin\nonebot_plugin_dst_qq\config\app_config.json`
+
+你也可以在机器人工作目录手动创建 `config/app_config.json`。若该文件存在，插件会作为兼容回退自动加载。
 
 #### 配置文件模板
 ```json

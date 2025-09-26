@@ -1,8 +1,8 @@
 import httpx
 from typing import Optional
-from nonebot import get_driver
+from nonebot import get_driver, logger
 from nonebot.adapters import Event
-from nonebot.adapters.onebot.v11 import Bot, Message
+from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 from nonebot.permission import SUPERUSER
 from nonebot_plugin_alconna import on_alconna, Match
 from arclet.alconna import Alconna, Args, Option, Subcommand
@@ -11,6 +11,9 @@ from arclet.alconna import Alconna, Args, Option, Subcommand
 from ..config import Config
 from ..cache_manager import cached, cache_manager
 from ..base_api import BaseAPI, APIResponse
+from ..message_utils import render_room_info_card, send_message
+from ..message_dedup import is_user_image_mode
+from ..message_utils import send_message
 
 # 创建DMP API实例
 dmp_api = None
@@ -18,10 +21,15 @@ dmp_api = None
 # 导入新的配置管理
 from ..config import get_config
 
-async def send_server_info_text(bot: Bot, event: Event, fallback_text: str) -> bool:
+async def send_server_info_text(
+    bot: Bot,
+    event: Event,
+    fallback_text: str,
+    card_data: Optional[dict] = None,
+) -> bool:
     """
     发送服务器信息文字版本
-    
+
     Args:
         bot: Bot实例
         event: 事件
@@ -30,6 +38,19 @@ async def send_server_info_text(bot: Bot, event: Event, fallback_text: str) -> b
     Returns:
         bool: 是否成功发送
     """
+    use_image = False
+    try:
+        user_id = str(event.get_user_id())
+        use_image = is_user_image_mode(user_id)
+    except Exception:
+        use_image = False
+
+    if use_image and card_data:
+        image_bytes = await render_room_info_card(card_data)
+        if image_bytes:
+            await bot.send(event, MessageSegment.image(image_bytes))
+            return True
+
     await send_long_message(bot, event, "服务器综合信息", fallback_text, max_length=1000)
     return True
 
@@ -45,7 +66,7 @@ async def send_help_menu_text(bot: Bot, event: Event, fallback_text: str) -> boo
     Returns:
         bool: 是否成功发送
     """
-    await bot.send(event, fallback_text)
+    await send_message(bot, event, fallback_text)
     return True
 
 async def send_long_message(bot: Bot, event: Event, title: str, content: str, max_length: int = 800):
@@ -62,7 +83,7 @@ async def send_long_message(bot: Bot, event: Event, title: str, content: str, ma
     try:
         # 如果消息长度在阈值内，直接发送
         if len(content) <= max_length:
-            await bot.send(event, content)
+            await send_message(bot, event, content)
             return
         
         # 获取机器人信息
@@ -100,9 +121,6 @@ async def send_long_message(bot: Bot, event: Event, title: str, content: str, ma
             }
             forward_nodes.append(node)
         
-        # 发送合并转发消息
-        from nonebot.adapters.onebot.v11 import MessageSegment
-        
         if hasattr(event, 'group_id'):
             # 群聊使用合并转发
             try:
@@ -112,7 +130,7 @@ async def send_long_message(bot: Bot, event: Event, title: str, content: str, ma
                     messages=forward_nodes
                 )
             except Exception as e:
-                print(f"⚠️ 群聊合并转发失败: {e}")
+                logger.warning(f"群聊合并转发失败: {e}")
                 # 降级为普通消息
                 raise e
         else:
@@ -124,13 +142,13 @@ async def send_long_message(bot: Bot, event: Event, title: str, content: str, ma
                     messages=forward_nodes
                 )
             except Exception as e:
-                print(f"⚠️ 私聊合并转发失败: {e}")
+                logger.warning(f"私聊合并转发失败: {e}")
                 # 降级为普通消息
                 raise e
         
     except Exception as e:
         # 如果合并转发失败，降级为普通消息发送
-        print(f"⚠️ 合并转发失败，降级为普通消息: {e}")
+        logger.warning(f"合并转发失败，降级为普通消息: {e}")
         await bot.send(event, content)
 
 # 创建Alconna命令 - 优化后的菜单，移除单独的世界、系统、玩家命令
@@ -187,7 +205,7 @@ class DMPAPI(BaseAPI):
             response = await self.get("/setting/clusters")
             return response
         except Exception as e:
-            print(f"⚠️ 获取集群列表异常: {e}")
+            logger.warning(f"获取集群列表异常: {e}")
             return APIResponse(code=500, message=f"获取集群列表异常: {e}")
     
     async def get_current_cluster(self) -> str:
@@ -447,19 +465,57 @@ async def handle_room_cmd(bot: Bot, event: Event):
                 'memory_usage': sys_result.data.get('memory', sys_result.data.get('memoryUsage', 0))
             }
         
+        max_players_value: Optional[int] = None
+        if cluster_info:
+            raw_max = cluster_info.get('playerNum')
+            try:
+                max_players_value = int(raw_max)
+            except Exception:
+                max_players_value = None
+        cluster_setting_data = locals().get('cluster_setting')
+        if max_players_value is None and isinstance(cluster_setting_data, dict):
+            try:
+                max_players_value = int(cluster_setting_data.get('playerNum'))  # type: ignore[arg-type]
+            except Exception:
+                max_players_value = None
+
+        room_display_name = cluster_display_name
+        if isinstance(cluster_setting_data, dict):
+            room_display_name = cluster_setting_data.get('name', cluster_display_name)  # type: ignore[assignment]
+        elif cluster_info:
+            room_display_name = cluster_info.get('name', cluster_display_name)
+
+        password_value = None
+        if isinstance(cluster_setting_data, dict):
+            password_value = cluster_setting_data.get('password')  # type: ignore[assignment]
+        if password_value in (None, '', '无'):
+            password_value = cluster_info.get('password') if cluster_info else None
+
+        pvp_flag = None
+        if cluster_info and 'pvp' in cluster_info:
+            pvp_flag = cluster_info.get('pvp')
+        if pvp_flag is None and isinstance(cluster_setting_data, dict):
+            pvp_flag = cluster_setting_data.get('pvp')
+        pvp_status_text = '开启' if pvp_flag else '关闭'
+
+        season_payload = '未知'
+        season_info_data = locals().get('season_info')
+        if season_info_data:
+            season_payload = season_info_data
+
         server_data = {
             'cluster_name': cluster_display_name,
             'status': cluster_status,
-            'online_players': str(online_players_count),
-            'max_players': cluster_info.get('playerNum', '未知') if cluster_info else '未知',
-            'admin_count': str(admin_count),
-            'room_name': cluster_info.get('name', '未知') if cluster_info else '未知',
-            'pvp_status': '开启' if cluster_info and cluster_info.get('pvp') else '关闭',
-            'password': cluster_info.get('password') if cluster_info and cluster_info.get('password') != '无' else None,
-            'season_info': season_info if 'season_info' in locals() else '未知',
+            'online_players': online_players_count,
+            'max_players': max_players_value,
+            'admin_count': admin_count,
+            'room_name': room_display_name,
+            'pvp_status': pvp_status_text,
+            'password': password_value,
+            'season_info': season_payload,
             'system_data': safe_system_data,
             'world_data': world_result.data if isinstance(world_result, APIResponse) and world_result.success else None,
-            'players_data': safe_players_data
+            'players_data': safe_players_data or {}
         }
         
         # 构建文字回退
@@ -471,17 +527,22 @@ async def handle_room_cmd(bot: Bot, event: Event):
             user_id = str(event.get_user_id())
             from ..message_dedup import _user_image_modes
             try_image_mode = user_id in _user_image_modes
-            print(f"🔍 房间命令用户检查: user_id={user_id}, image_modes={_user_image_modes}, try_image={try_image_mode}")
+            logger.debug(
+                "房间命令用户检查: user_id=%s, image_modes=%s, try_image=%s",
+                user_id,
+                list(_user_image_modes),
+                try_image_mode,
+            )
         except Exception as e:
-            print(f"⚠️ 获取用户图片模式失败: {e}")
+            logger.warning(f"获取用户图片模式失败: {e}")
             try_image_mode = False
 
         # 直接使用文字模式
-        await send_server_info_text(bot, event, response)
+        await send_server_info_text(bot, event, response, server_data)
         
     except Exception as e:
         error_msg = f"❌ 处理房间信息命令时发生错误: {str(e)}"
-        print(f"⚠️ {error_msg}")
+        logger.error(error_msg)
         await bot.send(event, error_msg)
 
 # 注释：以下系统信息命令已整合到房间命令中
@@ -607,7 +668,7 @@ async def handle_connection_cmd(bot: Bot, event: Event):
         
     except Exception as e:
         error_msg = f"❌ 处理直连信息命令时发生错误: {str(e)}"
-        print(f"⚠️ {error_msg}")
+        logger.error(error_msg)
         await bot.send(event, error_msg)
 
 @help_matcher.handle()
@@ -759,32 +820,22 @@ async def handle_help_cmd(bot: Bot, event: Event):
             user_id = str(event.get_user_id())
             from ..message_dedup import _user_image_modes
             try_image_mode = user_id in _user_image_modes
-            print(f"🔍 房间命令用户检查: user_id={user_id}, image_modes={_user_image_modes}, try_image={try_image_mode}")
+            logger.debug(
+                "房间命令用户检查: user_id=%s, image_modes=%s, try_image=%s",
+                user_id,
+                list(_user_image_modes),
+                try_image_mode,
+            )
         except Exception as e:
-            print(f"⚠️ 获取用户图片模式失败: {e}")
+            logger.warning(f"获取用户图片模式失败: {e}")
             try_image_mode = False
-
-        if False:  # 禁用图片模式
-            try:
-                # from ..text_to_image import generate_help_menu_image  # 已删除
-                from nonebot.adapters.onebot.v11 import MessageSegment
-                
-                # 使用二次元海报背景主题
-                result, image_bytes = await generate_help_menu_image(help_data, theme="anime_poster")
-                
-                if result == "bytes" and image_bytes:
-                    await bot.send(event, MessageSegment.image(image_bytes))
-                    print(f"✅ 帮助菜单图片发送成功")
-                    return
-            except Exception as img_e:
-                print(f"⚠️ 生成帮助菜单图片失败，回退到文字模式: {img_e}")
 
         # 回退到文字模式
         await send_help_menu_text(bot, event, help_text)
         
     except Exception as e:
         error_msg = f"❌ 处理帮助命令时发生错误: {str(e)}"
-        print(f"⚠️ {error_msg}")
+        logger.error(error_msg)
         await bot.send(event, error_msg)
 
 # handle_mode_cmd 已移至 output_mode_commands.py 中
@@ -1451,7 +1502,7 @@ def init_dmp_api():
     global dmp_api
     if dmp_api is None:
         dmp_api = DMPAPI()
-        print("✅ DMP API 实例初始化成功")
+        logger.success("DMP API 实例初始化成功")
 
 # 在模块加载时初始化
 init_dmp_api() 

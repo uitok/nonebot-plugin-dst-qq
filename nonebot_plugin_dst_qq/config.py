@@ -1,6 +1,9 @@
 from pathlib import Path
 from typing import List
+
+from nonebot import logger
 from pydantic import BaseModel
+
 import nonebot_plugin_localstore as store
 
 class DMPConfig(BaseModel):
@@ -71,35 +74,26 @@ class Config(BaseModel):
     message: MessageConfig = MessageConfig()
     logging: LoggingConfig = LoggingConfig()
     cache: CacheConfig = CacheConfig()
-    version: str = "0.4.10"
+    version: str = "0.5.0"
 
 # 获取目录的简单函数（延迟加载localstore）
 def get_config_dir() -> Path:
     """获取配置目录 - 使用localstore插件"""
-    try:
-        # 使用localstore的配置目录
-        return store.get_plugin_config_dir()
-    except Exception:
-        # 备用方案：当前工作目录下的config文件夹
-        return Path.cwd() / "config"
+    config_dir = store.get_plugin_config_dir()
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir
 
 def get_cache_dir() -> Path:
     """获取缓存目录 - 使用localstore插件"""
-    try:
-        # 使用localstore的缓存目录
-        return store.get_plugin_cache_dir()
-    except Exception:
-        # 备用方案：当前工作目录下的cache文件夹
-        return Path.cwd() / "cache"
+    cache_dir = store.get_plugin_cache_dir()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
 
 def get_data_dir() -> Path:
     """获取数据目录 - 使用localstore插件"""
-    try:
-        # 使用localstore的数据目录
-        return store.get_plugin_data_dir()
-    except Exception:
-        # 备用方案：当前工作目录下的data文件夹
-        return Path.cwd() / "data"
+    data_dir = store.get_plugin_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
 
 # NoneBot 插件配置类（空实现）
 class PluginConfig(BaseModel):
@@ -116,12 +110,10 @@ def _load_config_from_file() -> Config:
     
     # 配置文件搜索优先级
     config_paths = [
-        # 1. 机器人目录（当前工作目录）下的 config/app_config.json
-        Path.cwd() / "config" / "app_config.json",
-        # 2. localstore 插件配置目录
         get_config_dir() / "app_config.json",
-        # 3. localstore 插件数据目录（向后兼容）
-        get_data_dir() / "app_config.json"
+        get_data_dir() / "app_config.json",
+        # 兼容旧版本配置路径
+        Path.cwd() / "config" / "app_config.json",
     ]
     
     for config_file in config_paths:
@@ -129,13 +121,13 @@ def _load_config_from_file() -> Config:
             try:
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
-                print(f"✅ 配置已从 {config_file} 加载")
+                logger.success(f"配置已从 {config_file} 加载")
                 return Config(**config_data)
             except Exception as e:
-                print(f"警告：无法加载配置文件 {config_file}: {e}")
+                logger.warning(f"无法加载配置文件 {config_file}: {e}")
                 continue
     
-    print("⚠️ 未找到配置文件，使用默认配置")
+    logger.warning("未找到配置文件，使用默认配置")
     return Config()
 
 def get_config() -> Config:

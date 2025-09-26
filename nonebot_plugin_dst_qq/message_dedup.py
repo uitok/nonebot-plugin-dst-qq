@@ -3,10 +3,12 @@
 防止因网络问题导致的消息重复发送
 """
 
+import hashlib
 import time
 from functools import wraps
 from typing import Dict
-import hashlib
+
+from nonebot import logger
 
 class MessageDedup:
     """消息去重器"""
@@ -57,12 +59,12 @@ _user_image_modes = set()
 def add_user_image_mode(user_id: str):
     """为用户启用图片模式"""
     _user_image_modes.add(str(user_id))
-    print(f"🎨 用户 {user_id} 已启用图片模式")
+    logger.info(f"用户 {user_id} 已启用图片模式")
 
 def remove_user_image_mode(user_id: str):
     """为用户禁用图片模式"""
     _user_image_modes.discard(str(user_id))
-    print(f"📝 用户 {user_id} 已禁用图片模式")
+    logger.info(f"用户 {user_id} 已禁用图片模式")
 
 def is_user_image_mode(user_id: str) -> bool:
     """检查用户是否启用了图片模式"""
@@ -108,7 +110,7 @@ def dedup_message(func):
             return await func(*args, **kwargs)
         else:
             # 重复消息，跳过发送
-            print(f"🔇 消息去重: 跳过重复消息发送给用户 {user_id}")
+            logger.debug(f"消息去重: 跳过重复消息发送给用户 {user_id}")
             return
     
     return wrapper
@@ -123,13 +125,13 @@ async def send_with_dedup(bot, event, message):
     
     # 检查去重
     if not _dedup_instance.should_send(user_id, str(message)):
-        print(f"🔇 消息去重: 跳过重复消息发送给用户 {user_id}")
+        logger.debug(f"消息去重: 跳过重复消息发送给用户 {user_id}")
         return
     
     # 发送消息
     try:
         result = await bot.send(event, message)
-        print(f"✅ 消息发送成功: {result}")
+        logger.success(f"消息发送成功: {result}")
     except Exception as send_error:
-        print(f"❌ 消息发送失败: {send_error}")
+        logger.error(f"消息发送失败: {send_error}")
         raise

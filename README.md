@@ -70,6 +70,9 @@ poetry add nonebot-plugin-dst-qq
 ### 1. 环境变量配置
 在 `.env` 文件中添加：
 ```env
+# NoneBot 驱动组合 (必须包含 httpx，确保支持 WS 客户端)
+DRIVER="~fastapi[websockets]+~httpx"
+
 # OneBot V11 配置 (必需)
 ONEBOT_WS_URLS=["ws://your-onebot-server:port"]
 ONEBOT_ACCESS_TOKEN="your-access-token"
@@ -84,8 +87,11 @@ LOG_LEVEL=DEBUG
 
 ### 2. DMP 配置文件
 插件会自动在以下位置创建配置文件：
-- `config/config/app_config.json` - 主配置文件
-- `nonebot_plugin_dst_qq/app_config.template.json` - 配置模板
+- 默认主配置：`~/.local/share/nonebot/plugin/nonebot_plugin_dst_qq/config/app_config.json`
+  - macOS: `~/Library/Application Support/nonebot/plugin/nonebot_plugin_dst_qq/config/app_config.json`
+  - Windows: `%APPDATA%\nonebot\plugin\nonebot_plugin_dst_qq\config\app_config.json`
+- 模板文件：`nonebot_plugin_dst_qq/app_config.template.json`
+- 兼容路径：`config/app_config.json`（如旧版本已存在，仍会被自动读取）
 
 配置示例：
 ```json
@@ -286,8 +292,14 @@ nonebot_plugin_dst_qq/
 
 **1. 插件无法连接DMP服务器**
 ```bash
-# 检查配置文件
-cat config/config/app_config.json
+# 找到实际的配置文件路径
+python - <<'PY'
+from nonebot_plugin_localstore import get_plugin_config_dir
+print(get_plugin_config_dir() / "app_config.json")
+PY
+# 查看配置内容
+cat ~/.local/share/nonebot/plugin/nonebot_plugin_dst_qq/config/app_config.json
+# (请将路径替换为上一步输出值)
 # 测试网络连通性
 curl -X GET "http://your-dmp-server:port/v1/auth/login"
 ```

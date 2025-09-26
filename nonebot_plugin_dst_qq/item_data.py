@@ -2926,14 +2926,3 @@ def get_total_count() -> int:
 
 # 统计信息
 TOTAL_ITEMS = len(ITEM_NAME_MAPPING)
-
-if __name__ == "__main__":
-    print(f"加载了 {TOTAL_ITEMS} 个物品")
-    
-    # 测试搜索功能
-    test_keywords = ["旺达", "wanda", "背包", "axe", "大理石"]
-    for keyword in test_keywords:
-        results = search_items(keyword, 3)
-        print(f"搜索 '{keyword}': 找到 {len(results)} 个结果")
-        for item in results:
-            print(f"  {item['chinese_name']} ({item['english_name']})")

@@ -1,6 +1,10 @@
-from pathlib import Path
+import os
+import time
+from datetime import datetime
+
 import nonebot
 from nonebot.plugin import PluginMetadata, require
+from nonebot import logger
 
 # 声明插件依赖
 require("nonebot_plugin_alconna")
@@ -69,27 +73,41 @@ from .config import get_config
 # 导入子插件模块将在启动时进行，避免在插件加载时导入Alconna
 # 这样可以避免与其他插件的加载冲突
 
+def _ensure_process_timezone() -> None:
+    """确保进程时区与默认配置一致"""
+    try:
+        offset_seconds = int((datetime.now() - datetime.utcnow()).total_seconds())
+        if offset_seconds == 0:
+            os.environ["TZ"] = "Asia/Shanghai"
+            if hasattr(time, "tzset"):
+                time.tzset()
+            logger.info("已将进程时区调整为 Asia/Shanghai")
+    except Exception as error:
+        logger.debug(f"跳过时区调整: {error}")
+
+
 async def init_components():
     """初始化各组件"""
     components = []
-    
+    _ensure_process_timezone()
+
     try:
         # 延迟导入命令模块，避免在插件加载时导入Alconna
-        print("🔍 开始导入子插件模块...")
+        logger.info("开始导入子插件模块")
         
         # 核心功能模块
         from .plugins import dmp_api, dmp_advanced, message_bridge
-        print("✅ 核心功能模块导入成功")
+        logger.success("核心功能模块导入成功")
 
         # 命令模块
         from . import main_menu, admin_commands, cluster_commands, debug_commands, item_commands, server_commands, server_browser_commands
-        print("✅ 命令模块导入成功")
-        
-        print("✅ 所有子插件模块加载成功")
+        logger.success("命令模块导入成功")
+
+        logger.success("所有子插件模块加载成功")
         
         # 配置系统
         config = get_config()
-        print(f"✅ 配置加载: {config.dmp.base_url}")
+        logger.success(f"配置加载: {config.dmp.base_url}")
         
         # 集群管理器
         from .simple_cache import get_cache
@@ -99,26 +117,26 @@ async def init_components():
         cluster_manager = init_cluster_manager(dmp_api, get_cache())
         clusters = await cluster_manager.get_available_clusters()
         if clusters:
-            print(f"✅ 集群管理器启动 ({len(clusters)} 个集群)")
+            logger.success(f"集群管理器启动 ({len(clusters)} 个集群)")
         
         # 核心服务
         from .plugins.message_bridge import start_message_bridge
         await start_message_bridge()
-        print("✅ 消息互通服务启动")
+        logger.success("消息互通服务启动")
         
         from .database import item_wiki_manager, chat_history_db
         await item_wiki_manager.init_database()
-        print("✅ 物品Wiki系统启动")
+        logger.success("物品Wiki系统启动")
         
         await chat_history_db.init_database()
-        print("✅ 数据库系统启动")
+        logger.success("数据库系统启动")
         
         from .scheduler import init_maintenance_scheduler
         await init_maintenance_scheduler()
-        print("✅ 定时任务调度器启动")
-        
+        logger.success("定时任务调度器启动")
+
     except Exception as e:
-        print(f"⚠️ 组件初始化异常: {e}")
+        logger.exception(f"组件初始化异常: {e}")
 
 # 插件生命周期函数
 def setup_lifecycle_handlers():
@@ -128,34 +146,40 @@ def setup_lifecycle_handlers():
     @driver.on_startup
     async def startup():
         """插件启动初始化"""
-        print("🚀 DMP饥荒管理平台插件启动中...")
+        logger.info("DMP饥荒管理平台插件启动中")
         await init_components()
-        print("✅ 插件启动完成")
+        logger.success("插件启动完成")
 
     @driver.on_shutdown
     async def shutdown():
         """插件关闭清理"""
-        print("🔄 DMP插件正在关闭...")
-        
+        logger.info("DMP插件正在关闭")
+
         try:
             # 停止消息互通
             from .plugins.message_bridge import stop_message_bridge
             await stop_message_bridge()
-            print("✅ 消息互通服务已停止")
+            logger.success("消息互通服务已停止")
             
             # 显示缓存统计
             try:
                 from .simple_cache import get_cache
                 cache = get_cache()
                 stats = cache.get_stats()
-                print(f"📊 缓存统计: 内存项目 {stats.get('memory_items', 0)}, 命中率 {stats.get('hit_rate', 0):.1%}")
+                memory_items = stats.get('memory_items', 0)
+                hit_rate = stats.get('hit_rate', 0) or 0
+                logger.info(
+                    "缓存统计: 内存项目 {}，命中率 {:.1f}%",
+                    memory_items,
+                    hit_rate * 100,
+                )
             except Exception:
-                print("📊 缓存统计获取失败")
+                logger.warning("缓存统计获取失败")
             
         except Exception as e:
-            print(f"⚠️ 清理异常: {e}")
+            logger.exception(f"清理异常: {e}")
         
-        print("👋 DMP插件已关闭")
+        logger.info("DMP插件已关闭")
 
 # 尝试设置生命周期处理器（如果NoneBot已初始化）
 try:
@@ -163,4 +187,3 @@ try:
 except ValueError:
     # NoneBot未初始化时延迟设置
     pass
-

@@ -2,8 +2,9 @@
 import asyncio
 import re
 from typing import Dict, Any, List, Optional
+
 import httpx
-from nonebot import get_driver
+from nonebot import get_driver, logger
 from nonebot.adapters.onebot.v11 import Bot
 from nonebot.adapters import Event
 from nonebot.permission import SUPERUSER
@@ -108,7 +109,7 @@ class DMPAdvancedAPI(BaseAPI):
                 first_cluster = clusters[0]
                 if isinstance(first_cluster, dict):
                     cluster_name = first_cluster.get("clusterName", "")
-                    print(f"🔍 自动选择集群: {cluster_name}")
+                    logger.debug(f"自动选择集群: {cluster_name}")
                     return cluster_name
         return None
     
@@ -270,7 +271,7 @@ async def _check_admin_permission(bot: Bot, event: Event, user_id: str) -> bool:
         
         return False
     except Exception as e:
-        print(f"⚠️ 权限检查失败: {e}")
+        logger.warning(f"权限检查失败: {e}")
         return False
 
 def require_admin(func):
@@ -325,7 +326,7 @@ async def handle_admin_cmd(bot: Bot, event: Event):
         
     except Exception as e:
         error_msg = f"❌ 处理管理命令时发生错误: {str(e)}"
-        print(f"⚠️ {error_msg}")
+        logger.error(error_msg)
         await bot.send(event, error_msg, at_sender=True)
 
 @admin_alias_matcher.handle()
@@ -360,28 +361,18 @@ async def handle_advanced_cmd(bot: Bot, event: Event):
 🔃 /刷新集群 - 刷新集群列表缓存
 📋 /集群详情 - 查看指定集群详细信息
 
-📊 数据管理
+📊 缓存工具
 💾 /缓存状态 - 查看缓存系统状态
 🗑️ /清理缓存 - 清理指定类型缓存
-📈 /缓存统计 - 查看详细缓存统计
-🔧 /缓存帮助 - 显示缓存管理帮助
-
-🗜️ 数据压缩
-📊 /数据分析 - 分析数据库大小分布
-🗜️ /压缩数据 - 压缩指定日期数据
-📦 /归档数据 - 归档指定月份数据
-🤖 /自动压缩 - 自动压缩所有旧数据
-📁 /查看归档 - 查看归档文件列表
-🧹 /清理归档 - 清理过期归档文件
-🔧 /数据维护 - 执行完整数据维护流程
+🔁 /刷新缓存 - 清空并预热缓存
 
 ⚙️ 系统配置
 📋 /配置状态 - 查看当前配置状态
 🔍 /查看配置 - 查看完整配置内容
 ✅ /验证配置 - 验证配置正确性
 🔗 /测试连接 - 测试DMP服务器连接
-🔄 /重载配置 - 重新加载配置文件
-📝 /更新配置 - 查看配置更新指南
+
+ℹ️ 数据压缩与归档任务已自动执行，无需手动触发。
 
 ⚠️ 高级功能说明:
 • 🔐 所有功能均需超级用户权限
@@ -396,7 +387,7 @@ async def handle_advanced_cmd(bot: Bot, event: Event):
         
     except Exception as e:
         error_msg = f"❌ 处理高级功能命令时发生错误: {str(e)}"
-        print(f"⚠️ {error_msg}")
+        logger.error(error_msg)
         await bot.send(event, error_msg, at_sender=True)
 
 @advanced_alias_matcher.handle()
@@ -971,7 +962,7 @@ async def _generate_advanced_menu_html() -> str:
             </div>
             
             <div class="menu-section">
-                <div class="section-title">📊 数据管理</div>
+                <div class="section-title">📊 缓存工具</div>
                 <div class="menu-item">
                     <span class="command">💾 /缓存状态</span>
                     <span class="description">查看缓存系统状态</span>
@@ -981,32 +972,8 @@ async def _generate_advanced_menu_html() -> str:
                     <span class="description">清理指定类型缓存</span>
                 </div>
                 <div class="menu-item">
-                    <span class="command">📈 /缓存统计</span>
-                    <span class="description">查看详细缓存统计</span>
-                </div>
-                <div class="menu-item">
-                    <span class="command">🔧 /缓存帮助</span>
-                    <span class="description">显示缓存管理帮助</span>
-                </div>
-            </div>
-            
-            <div class="menu-section">
-                <div class="section-title">🗜️ 数据压缩</div>
-                <div class="menu-item">
-                    <span class="command">📊 /数据分析</span>
-                    <span class="description">分析数据库大小分布</span>
-                </div>
-                <div class="menu-item">
-                    <span class="command">🗜️ /压缩数据</span>
-                    <span class="description">压缩指定日期数据</span>
-                </div>
-                <div class="menu-item">
-                    <span class="command">📦 /归档数据</span>
-                    <span class="description">归档指定月份数据</span>
-                </div>
-                <div class="menu-item">
-                    <span class="command">📁 /查看归档</span>
-                    <span class="description">查看归档文件列表</span>
+                    <span class="command">🔁 /刷新缓存</span>
+                    <span class="description">清空并预热缓存</span>
                 </div>
             </div>
             
@@ -1032,10 +999,8 @@ async def _generate_advanced_menu_html() -> str:
             
             <div class="warning">
                 <div class="warning-text">
-                    ⚠️ 高级功能说明:<br>
-                    • 🔐 所有功能均需超级用户权限<br>
-                    • 💡 使用前请先了解对应功能的作用<br>
-                    • 🚨 某些操作不可逆，请谨慎使用
+                    ℹ️ 数据压缩与归档任务已自动执行，无需手动操作。<br>
+                    ⚠️ 高级功能仍需超级用户谨慎使用。
                 </div>
             </div>
             
@@ -1054,7 +1019,7 @@ def init_dmp_advanced_api():
     global dmp_advanced_api
     if dmp_advanced_api is None:
         dmp_advanced_api = DMPAdvancedAPI()
-        print("✅ DMP Advanced API 实例初始化成功")
+        logger.success("DMP Advanced API 实例初始化成功")
 
 # 在模块加载时初始化
 init_dmp_advanced_api() 

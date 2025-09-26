@@ -3,16 +3,18 @@
 整合缓存、压缩、配置等管理功能
 """
 
+from typing import List
+
 from nonebot.adapters import Bot, Event
 from nonebot_plugin_alconna import on_alconna
 from arclet.alconna import Alconna
-from nonebot.permission import SUPERUSER
 from nonebot import logger
 
+from .cluster_manager import get_cluster_manager
 from .message_utils import send_message, handle_command_errors
-from .utils import require_admin
+from .server_browser import dst_browser
 from .simple_cache import get_cache
-from .config import get_config
+from .utils import require_admin
 
 # 缓存管理命令
 cache_status_cmd = on_alconna(
@@ -75,100 +77,53 @@ async def handle_cache_clear(bot: Bot, event: Event):
     except Exception as e:
         await send_message(bot, event, f"❌ 清理缓存失败: {e}")
 
-# 配置重载命令  
-config_reload_cmd = on_alconna(
-    Alconna("重载配置"),
-    aliases={"config_reload", "配置重载"},
+# 缓存刷新命令
+cache_refresh_cmd = on_alconna(
+    Alconna("刷新缓存"),
+    aliases={"cache_refresh", "刷新数据缓存"},
     priority=1,
     block=True
 )
 
-@config_reload_cmd.handle()
+@cache_refresh_cmd.handle()
 @require_admin
-@handle_command_errors("重载配置")
-async def handle_config_reload(bot: Bot, event: Event):
-    """重载配置文件"""
+@handle_command_errors("刷新缓存")
+async def handle_cache_refresh(bot: Bot, event: Event):
+    """清空并预热关键缓存"""
     try:
-        from .config import get_config
-        config = get_config()
-        success = True  # 简化配置无需重载
-        
-        if success:
-            await send_message(bot, event, "✅ 配置重载成功")
+        cache = get_cache()
+        await cache.clear()
+
+        warmed_items: List[str] = []
+
+        # 预热服务器列表缓存
+        try:
+            response = await dst_browser.get_server_list()
+            if response and response.success:
+                data = response.data or {}
+                server_count = len(data.get('GET', [])) if isinstance(data, dict) else 0
+                warmed_items.append(f"服务器列表 {server_count} 条")
+        except Exception as warm_error:
+            logger.debug(f"预热服务器列表失败: {warm_error}")
+
+        # 预热集群信息
+        try:
+            cluster_manager = get_cluster_manager()
+            if cluster_manager:
+                clusters = await cluster_manager.get_available_clusters(force_refresh=True)
+                warmed_items.append(f"集群信息 {len(clusters)} 项")
+        except Exception as warm_error:
+            logger.debug(f"预热集群信息失败: {warm_error}")
+
+        summary_lines = ["✅ 缓存刷新完成"]
+        if warmed_items:
+            summary_lines.append("🔥 已预热: " + "、".join(warmed_items))
         else:
-            await send_message(bot, event, "❌ 配置重载失败")
+            summary_lines.append("ℹ️ 无可预热的数据源")
+
+        await send_message(bot, event, "\n".join(summary_lines))
     except Exception as e:
-        await send_message(bot, event, f"❌ 重载配置失败: {e}")
-
-# 系统状态命令
-system_status_cmd = on_alconna(
-    Alconna("系统状态"),
-    aliases={"system_status", "状态概览"},
-    priority=1,
-    block=True
-)
-
-@system_status_cmd.handle()
-@require_admin
-@handle_command_errors("获取系统状态")
-async def handle_system_status(bot: Bot, event: Event):
-    """显示系统整体状态"""
-    try:
-        # 获取各系统状态
-        from .cache_manager import cache_manager
-        from .data_archive_manager import archive_manager
-        
-        cache_stats = cache_manager.get_stats()
-        
-        status_msg = f"""🖥️ 系统状态总览
-
-📊 缓存系统:
-• 命中率: {cache_stats.get('hit_rate', 0):.1%}
-• 总请求: {cache_stats.get('total_requests', 0):,}
-
-💾 数据归档:
-• 归档目录: {archive_manager.archive_dir}
-• 运行状态: 正常
-
-🔗 DMP连接:
-• 状态: 已连接
-• 服务器: 正常响应
-
-⚡ 性能指标:
-• 内存使用: 正常
-• 响应时间: 优秀
-
-✅ 系统运行正常"""
-
-        await send_message(bot, event, status_msg)
-    except Exception as e:
-        await send_message(bot, event, f"❌ 获取系统状态失败: {e}")
-
-# 数据维护命令
-maintenance_cmd = on_alconna(
-    Alconna("数据维护"),
-    aliases={"maintenance", "维护数据"},
-    priority=1,
-    block=True
-)
-
-@maintenance_cmd.handle()
-@require_admin
-@handle_command_errors("数据维护")
-async def handle_maintenance(bot: Bot, event: Event):
-    """执行数据维护任务"""
-    try:
-        from .scheduler import maintenance_scheduler
-        
-        # 触发立即维护
-        result = await maintenance_scheduler.run_maintenance_now()
-        
-        if result:
-            await send_message(bot, event, "✅ 数据维护任务执行完成")
-        else:
-            await send_message(bot, event, "⚠️ 数据维护任务执行失败")
-    except Exception as e:
-        await send_message(bot, event, f"❌ 数据维护失败: {e}")
+        await send_message(bot, event, f"❌ 刷新缓存失败: {e}")
 
 # 管理菜单命令
 admin_menu_cmd = on_alconna(
@@ -183,34 +138,16 @@ admin_menu_cmd = on_alconna(
 @handle_command_errors("管理菜单")
 async def handle_admin_menu(bot: Bot, event: Event):
     """显示管理员功能菜单"""
-    menu_text = """🔧 管理员功能菜单
+    menu_text = """🔧 管理员缓存工具
 
-┌─────────────────────────────┐
-│        📊 系统监控           │
-├─────────────────────────────┤
-│ /系统状态   系统总体状态     │
-│ /缓存状态   缓存系统状态     │
-│ /配置查看   当前配置信息     │
-└─────────────────────────────┘
+┌────────────────────────┐
+│        📦 缓存维护       │
+├────────────────────────┤
+│ /缓存状态   查看缓存统计 │
+│ /清理缓存   清空所有缓存 │
+│ /刷新缓存   清空并预热缓存 │
+└────────────────────────┘
 
-┌─────────────────────────────┐
-│        🛠️ 系统维护           │
-├─────────────────────────────┤
-│ /清理缓存   清理缓存数据     │
-│ /重载配置   重新加载配置     │
-│ /数据维护   执行维护任务     │
-│ /重载物品   重载物品数据     │
-└─────────────────────────────┘
-
-┌─────────────────────────────┐
-│        🎮 游戏管理           │
-├─────────────────────────────┤
-│ /集群状态   查看集群状态     │
-│ /游戏命令   执行游戏命令     │
-│ /消息同步   管理消息互通     │
-│ /数据分析   数据库分析       │
-└─────────────────────────────┘
-
-⚠️ 注意：管理命令仅限超级用户使用"""
+ℹ️ 数据压缩、归档以及定期维护任务已由系统自动执行。"""
 
     await send_message(bot, event, menu_text)

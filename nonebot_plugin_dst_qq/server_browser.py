@@ -184,18 +184,27 @@ class DSTServerBrowser:
                 # 提取有用信息
                 server_info = self._extract_server_info(server)
                 filtered_servers.append(server_info)
-                
-                # 限制结果数量
-                if len(filtered_servers) >= max_results:
-                    break
             
             region_name = self.regions.get(region, region)
             platform_name = self.platforms.get(platform, {}).get("name", platform)
+            total_matches = len(filtered_servers)
+
+            # 按在线人数排序，优先展示活跃房间
+            filtered_servers.sort(
+                key=lambda item: (item.get("connected", 0), item.get("max_connections", 0)),
+                reverse=True,
+            )
+
+            limited_servers = filtered_servers[:max_results]
             
             return APIResponse(
                 code=200,
-                message=f"找到 {len(filtered_servers)} 个服务器 ({region_name}-{platform_name})",
-                data=filtered_servers
+                message=(
+                    f"找到 {len(limited_servers)} 个服务器"
+                    + (f"（共 {total_matches} 个匹配，已按活跃度排序）" if total_matches > len(limited_servers) else "")
+                    + f" ({region_name}-{platform_name})"
+                ),
+                data=limited_servers
             )
             
         except Exception as e:

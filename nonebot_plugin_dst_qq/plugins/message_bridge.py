@@ -25,6 +25,7 @@ import httpx
 from nonebot import on_command, on_message, get_bot
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, PrivateMessageEvent, Message
+from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 from nonebot.typing import T_State
 from nonebot.matcher import Matcher
@@ -36,6 +37,8 @@ from ..config import get_config
 from ..database import ChatHistoryDatabase
 from nonebot import logger
 from ..cache_manager import cache_manager
+from ..message_dedup import add_user_image_mode, remove_user_image_mode, is_user_image_mode
+from ..message_utils import send_message
 
 # Using nonebot logger directly
 
@@ -880,10 +883,33 @@ async def handle_close_bridge(bot: Bot, event: Event, state: T_State):
 
 
 @switch_mode_cmd.handle()
-async def handle_switch_mode(bot: Bot, event: Event, state: T_State):
-    """处理切换聊天模式命令"""
+async def handle_switch_mode(
+    bot: Bot,
+    event: Event,
+    state: T_State,
+    args: Message = CommandArg(),
+):
+    """处理切换模式命令（输出模式 / 聊天模式）"""
     user_id = event.user_id
-    
+    arg_text = args.extract_plain_text().strip()
+
+    image_aliases = {"图片", "图", "image", "img", "pic"}
+    text_aliases = {"文字", "文本", "text"}
+
+    if arg_text:
+        if arg_text in image_aliases:
+            add_user_image_mode(str(user_id))
+            await send_message(bot, event, "🖼️ 已切换到图片输出模式，后续回复将以卡片形式展示")
+            raise FinishedException
+        if arg_text in text_aliases:
+            if is_user_image_mode(str(user_id)):
+                remove_user_image_mode(str(user_id))
+                await send_message(bot, event, "📝 已切换回文字输出模式")
+                raise FinishedException
+            else:
+                await send_message(bot, event, "当前已是文字输出模式")
+                raise FinishedException
+
     session = message_bridge.session_manager.get_session(user_id)
     if not session:
         await switch_mode_cmd.finish("请先开启消息互通功能！")
@@ -978,10 +1004,10 @@ def create_message_rule() -> Rule:
         command_keywords = [
             "消息互通", "开启互通", "关闭互通", "停止互通", "关闭消息互通",
             "切换模式", "聊天模式", "切换聊天模式", "互通状态", "消息状态",
-            "菜单", "世界", "房间", "系统", "玩家", "直连",
+            "菜单", "房间", "直连",
             "管理命令", "查看备份", "执行命令", "回滚世界",
-            "踢出玩家", "封禁玩家", "解封玩家", "缓存状态", "清理缓存",
-            "压缩数据", "查看归档"
+            "踢出玩家", "封禁玩家", "解封玩家",
+            "缓存状态", "清理缓存", "刷新缓存"
         ]
         
         # 如果是命令，不处理

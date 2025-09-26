@@ -13,21 +13,30 @@ from .server_browser import dst_browser
 from .message_utils import send_message
 
 async def _show_server_list_with_pagination(
-    bot: Bot, 
-    event: Event, 
-    all_servers: List[Dict[str, Any]], 
-    search_keyword: str, 
+    bot: Bot,
+    event: Event,
+    all_servers: List[Dict[str, Any]],
+    search_keyword: str,
     page: int = 1,
-    per_page: int = 10
+    per_page: int = 10,
+    *,
+    summary: Optional[str] = None,
+    total_count: Optional[int] = None,
 ):
     """显示带分页的服务器列表并处理用户交互"""
     
     try:
+        if summary:
+            await send_message(bot, event, summary)
+
         while True:
             # 获取当前页数据
             page_data = dst_browser.format_server_page(
-                all_servers, page=page, per_page=per_page, 
-                keyword=search_keyword, total_count=len(all_servers)
+                all_servers,
+                page=page,
+                per_page=per_page,
+                keyword=search_keyword,
+                total_count=total_count if total_count is not None else len(all_servers),
             )
             
             # 发送当前页信息
@@ -133,39 +142,157 @@ async def handle_server_browser(bot: Bot, event: Event, result: Arparma):
         # 限制结果数量
         max_results = min(max_results, 20)
         
-        logger.info(f"执行查房命令: 关键词='{keyword}', 区域={region}, 平台={platform}, 数量={max_results}")
-        
-        # 搜索服务器
-        response = await dst_browser.search_servers(
-            keyword=keyword,
-            region=region,
-            platform=platform,
-            max_results=max_results,
-            include_password=not exclude_password,
-            min_players=min_players,
-            max_players=max_players
+        logger.info(
+            "执行查房命令: 关键词='%s', 区域=%s, 平台=%s, 数量=%s",
+            keyword,
+            region,
+            platform,
+            max_results,
         )
-        
-        if not response.success:
-            await send_message(bot, event, f"❌ 查房失败: {response.message}")
+
+        requested_limit = max_results or 10
+        fetch_limit = min(max(requested_limit * 2, 20), 60)
+
+        region_candidates: List[str] = []
+        if region:
+            region_candidates.append(region)
+        else:
+            region_candidates.append(dst_browser.default_region)
+
+        # 追加其他可用区域作为自动兜底
+        for candidate in dst_browser.regions.keys():
+            if candidate not in region_candidates:
+                region_candidates.append(candidate)
+
+        aggregated_servers: List[Dict[str, Any]] = []
+        attempted_regions: List[str] = []
+        error_messages: List[str] = []
+
+        for candidate in region_candidates:
+            response = await dst_browser.search_servers(
+                keyword=keyword,
+                region=candidate,
+                platform=platform,
+                max_results=fetch_limit,
+                include_password=not exclude_password,
+                min_players=min_players,
+                max_players=max_players,
+            )
+
+            if not response.success:
+                if response.message:
+                    error_messages.append(response.message)
+                continue
+
+            servers = response.data or []
+            if servers:
+                attempted_regions.append(candidate)
+                aggregated_servers.extend(servers)
+
+            if len(aggregated_servers) >= requested_limit:
+                break
+
+        if not aggregated_servers:
+            if error_messages:
+                await send_message(bot, event, f"❌ 查房失败: {error_messages[0]}")
+            else:
+                search_info = []
+                if keyword:
+                    search_info.append(f"关键词: {keyword}")
+                if region:
+                    region_name = dst_browser.regions.get(region, region)
+                    search_info.append(f"区域: {region_name}")
+                if min_players:
+                    search_info.append(f"玩家≥{min_players}")
+                if max_players:
+                    search_info.append(f"玩家≤{max_players}")
+                if exclude_password:
+                    search_info.append("排除密码房")
+                filters_desc = f" ({', '.join(search_info)})" if search_info else ""
+                await send_message(bot, event, f"❌ 未找到匹配的服务器{filters_desc}")
             return
-        
-        servers = response.data
-        if not servers:
-            search_info = []
-            if keyword:
-                search_info.append(f"关键词: {keyword}")
-            if region:
-                region_name = dst_browser.regions.get(region, region)
-                search_info.append(f"区域: {region_name}")
-            search_text = f" ({', '.join(search_info)})" if search_info else ""
-            
-            await send_message(bot, event, f"❌ 未找到匹配的服务器{search_text}")
-            return
-        
-        # 使用分页交互显示
-        await _show_server_list_with_pagination(bot, event, servers, keyword)
-        
+
+        # 去重并按活跃度排序
+        unique_servers: List[Dict[str, Any]] = []
+        seen_keys = set()
+        for server in aggregated_servers:
+            key = (
+                server.get("guid")
+                or (server.get("host"), server.get("port"))
+                or server.get("rowid")
+            )
+
+            if isinstance(key, tuple):
+                key = ":".join(str(part) for part in key if part)
+
+            if not key:
+                key = f"{server.get('name','')}-{server.get('region','')}-{server.get('connected',0)}-{server.get('timestamp','')}"
+
+            if key in seen_keys:
+                continue
+
+            seen_keys.add(key)
+            unique_servers.append(server)
+
+        unique_servers.sort(
+            key=lambda s: (s.get("connected", 0), s.get("max_connections", 0)),
+            reverse=True,
+        )
+
+        total_found = len(unique_servers)
+        display_servers = unique_servers[:requested_limit]
+
+        region_labels = [
+            dst_browser.regions.get(item, item) for item in (attempted_regions or region_candidates[:1])
+        ]
+
+        filter_parts: List[str] = []
+        if keyword:
+            filter_parts.append(f"关键词「{keyword}」")
+        if min_players:
+            filter_parts.append(f"玩家≥{min_players}")
+        if max_players:
+            filter_parts.append(f"玩家≤{max_players}")
+        if exclude_password:
+            filter_parts.append("排除密码房")
+        if platform != "steam":
+            platform_name = dst_browser.platforms.get(platform, {}).get("name", platform)
+            filter_parts.append(f"平台: {platform_name}")
+
+        top_server = display_servers[0] if display_servers else None
+        summary_lines = ["📊 查房结果概览"]
+        if filter_parts:
+            summary_lines.append(f"• 筛选条件: {', '.join(filter_parts)}")
+        summary_lines.append(
+            "• 检索区域: " + ", ".join(region_labels)
+        )
+        summary_lines.append(
+            "• 匹配总数: {} 个{}".format(
+                total_found,
+                "（展示前 {} 个）".format(len(display_servers)) if total_found > len(display_servers) else "",
+            )
+        )
+        if top_server:
+            summary_lines.append(
+                "• 最活跃: {} ({}/{})".format(
+                    top_server.get("name", "未知"),
+                    top_server.get("connected", 0),
+                    top_server.get("max_connections", 0),
+                )
+            )
+
+        summary_message = "\n".join(summary_lines)
+
+        per_page = min(8, max(1, len(display_servers)))
+        await _show_server_list_with_pagination(
+            bot,
+            event,
+            display_servers,
+            keyword,
+            per_page=per_page,
+            summary=summary_message,
+        )
+
     except Exception as e:
         logger.error(f"查房命令执行失败: {e}")
         await send_message(bot, event, f"❌ 查房功能出错: {str(e)}")
