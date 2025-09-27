@@ -74,7 +74,7 @@ class Config(BaseModel):
     message: MessageConfig = MessageConfig()
     logging: LoggingConfig = LoggingConfig()
     cache: CacheConfig = CacheConfig()
-    version: str = "0.5.0"
+    version: str = "0.5.1"
 
 # 获取目录的简单函数（延迟加载localstore）
 def get_config_dir() -> Path:

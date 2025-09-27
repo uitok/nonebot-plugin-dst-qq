@@ -174,7 +174,7 @@ room_matcher = on_alconna(room_cmd)
 # sys_matcher = on_alconna(sys_cmd)  # 已整合到房间命令中
 # players_matcher = on_alconna(players_cmd)  # 已整合到房间命令中
 connection_matcher = on_alconna(connection_cmd)
-help_matcher = on_alconna(help_cmd)
+help_matcher = on_alconna(help_cmd, priority=0, block=True)
 # mode_matcher 已移至 output_mode_commands.py 中
 
 # world_eng_matcher = on_alconna(world_cmd_eng)  # 已整合到房间命令中
@@ -182,7 +182,7 @@ room_eng_matcher = on_alconna(room_cmd_eng)
 # sys_eng_matcher = on_alconna(sys_cmd_eng)  # 已整合到房间命令中
 # players_eng_matcher = on_alconna(players_cmd_eng)  # 已整合到房间命令中
 connection_eng_matcher = on_alconna(connection_cmd_eng)
-help_eng_matcher = on_alconna(help_cmd_eng)
+help_eng_matcher = on_alconna(help_cmd_eng, priority=0, block=True)
 
 class DMPAPI(BaseAPI):
     """DMP API客户端"""
