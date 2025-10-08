@@ -20,7 +20,7 @@ except ImportError:
     BeautifulSoup = None
 
 from nonebot import logger
-from nonebot_plugin_htmlrender import get_browser, html_to_pic
+from nonebot_plugin_htmlrender import get_new_page, html_to_pic
 
 
 class WikiScreenshotTool:
@@ -374,34 +374,69 @@ class WikiScreenshotTool:
             url = f"https://dontstarve.huijiwiki.com/wiki/{encoded_name}"
             
             logger.info(f"正在截图Wiki页面: {url}")
-            
-            browser = await get_browser()
-            
-            # 创建上下文以启用更多反检测功能
-            context = await browser.new_context(
-                viewport={"width": 1200, "height": 800},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 EdgA/120.0.0.0",
-                extra_http_headers={
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Cache-Control': 'max-age=0',
-                    'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Microsoft Edge";v="120"',
-                    'Sec-Ch-Ua-Mobile': '?0',
-                    'Sec-Ch-Ua-Platform': '"Windows"',
-                    'Sec-Fetch-Dest': 'document',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'none',
-                    'Sec-Fetch-User': '?1',
-                    'Upgrade-Insecure-Requests': '1'
-                },
-                ignore_https_errors=True,
-                java_script_enabled=True
-            )
-            
-            page = await context.new_page()
-            
-            try:
+
+            # 使用 htmlrender 提供的页面创建接口，插件负责上下文与资源管理
+            async with get_new_page() as page:
+                # 设置视口，尽量保持与原先一致
+                try:
+                    await page.set_viewport_size({"width": 1200, "height": 800})
+                except Exception:
+                    pass
+                
+                # 设置更真实的请求头与 UA（通过路由拦截覆盖请求头）
+                ua = (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
+                )
+                custom_headers = {
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                    "Cache-Control": "max-age=0",
+                    "Sec-Ch-Ua": '"Chromium";v="120", "Microsoft Edge";v="120", "Not.A/Brand";v="24"',
+                    "Sec-Ch-Ua-Mobile": "?0",
+                    "Sec-Ch-Ua-Platform": '"Windows"',
+                    "Upgrade-Insecure-Requests": "1",
+                    # User-Agent 将在 route 中统一覆盖
+                }
+                
+                async def _header_route(route, request):  # type: ignore
+                    try:
+                        headers = {**request.headers}
+                        headers.update(custom_headers)
+                        headers["User-Agent"] = ua
+                        await route.continue_(headers=headers)
+                    except Exception:
+                        await route.continue_()
+                
+                try:
+                    await page.route("**/*", _header_route)
+                except Exception:
+                    pass
+                
+                # 注入防检测脚本（在文档创建前执行）
+                try:
+                    await page.add_init_script(
+                        """
+                        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                        Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
+                        Object.defineProperty(navigator, 'vendor', { get: () => 'Google Inc.' });
+                        Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN','zh','en'] });
+                        // 伪造 userAgent（仅供 JS 检测，网络层由拦截器覆盖）
+                        Object.defineProperty(navigator, 'userAgent', { get: () => '%s' });
+                        try {
+                          const getParameter = WebGLRenderingContext.prototype.getParameter;
+                          WebGLRenderingContext.prototype.getParameter = function(param) {
+                            if (param === 37445) return 'Intel Open Source Technology Center';
+                            if (param === 37446) return 'ANGLE (Intel, Intel(R) HD Graphics 620 Direct3D11 vs_5_0 ps_5_0)';
+                            return getParameter.apply(this, arguments);
+                          };
+                        } catch (e) {}
+                        """ % ua
+                    )
+                except Exception:
+                    pass
+                
                 # 先等待一个随机时间，模拟人类行为
                 await page.wait_for_timeout(random.randint(1000, 3000))
                 
@@ -516,10 +551,6 @@ class WikiScreenshotTool:
                 else:
                     logger.warning(f"Wiki页面截图失败: {item_name}")
                     return None
-                    
-            finally:
-                await page.close()
-                await context.close()
                 
         except Exception as e:
             logger.error(f"截图Wiki页面时出错: {e}")
