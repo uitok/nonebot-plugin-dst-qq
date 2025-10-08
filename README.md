@@ -365,8 +365,8 @@ pytest tests/
 
 本项目采用 [MIT](LICENSE) 许可证。
 
-## 🙏 致谢
-
+## 🙏 致谢 
+- [DMP饥荒管理面板]([https://nonebot.dev/](https://github.com/miracleEverywhere/dst-management-platform-api)) - 完善的饥荒管理平台
 - [NoneBot2](https://nonebot.dev/) - 优秀的Python异步机器人框架
 - [Alconna](https://github.com/ArcletProject/Alconna) - 强大的命令解析器
 - [OneBot](https://onebot.dev/) - 聊天机器人应用接口标准
