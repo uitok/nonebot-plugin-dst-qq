@@ -153,35 +153,67 @@ SESSION_EXPIRE_TIMEOUT=120
 #### 配置文件模板
 ```json
 {
-    "dmp_url": "http://your-server.com:20000/v1",
-    "auth": {
-        "username": "your-username",
-        "password": "your-password"
-    },
-    "clusters": ["YourClusterName"],
-    "cache_settings": {
-        "enable_cache": true,
-        "memory_cache_size": 1000,
-        "file_cache_ttl": 3600,
-        "api_cache_ttl": 300
-    },
-    "database_settings": {
-        "chat_history_days": 30,
-        "auto_cleanup": true,
-        "backup_enabled": true
-    },
-    "bridge_settings": {
-        "message_filter": true,
-        "max_message_length": 200,
-        "auto_reconnect": true,
-        "session_timeout": 1800
-    },
-    "wiki_settings": {
-        "enable_screenshot": true,
-        "screenshot_timeout": 30,
-        "headless_mode": true,
-        "cache_screenshots": true
-    }
+  "version": "1.0.0",
+  "last_updated": "2024-12-30",
+  "dmp": {
+    "base_url": "http://your-dmp-server:8080/v1",
+    "token": "your-dmp-token-here",
+    "timeout": 10.0,
+    "max_retries": 3,
+    "retry_delay": 1.0,
+    "auto_discover_clusters": true,
+    "cluster_cache_ttl": 300
+  },
+  "bot": {
+    "superusers": ["your-qq-number"],
+    "command_prefix": "/",
+    "enable_private_chat": true,
+    "enable_group_chat": true,
+    "admin_groups": [],
+    "allowed_groups": []
+  },
+  "cache": {
+    "memory_max_size": 1000,
+    "memory_default_ttl": 300,
+    "file_cache_dir": "./cache",
+    "file_max_size": 10000,
+    "file_default_ttl": 1800,
+    "cleanup_interval": 3600,
+    "auto_cleanup": true
+  },
+  "message": {
+    "enable_message_bridge": true,
+    "sync_interval": 3.0,
+    "max_message_length": 200,
+    "default_chat_mode": "private",
+    "allow_group_chat": true,
+    "allow_private_chat": true,
+    "default_target_cluster": "",
+    "default_target_world": "Master",
+    "auto_select_world": true,
+    "filter_system_messages": true,
+    "filter_qq_messages": true,
+    "blocked_words": [],
+    "blocked_players": [],
+    "qq_to_game_template": "[QQ] {username}: {message}",
+    "game_to_qq_template": "🎮 [{cluster}] {player}: {message}",
+    "system_message_template": "📢 [{cluster}] 系统: {message}",
+    "enable_message_cache": true,
+    "cache_duration": 300,
+    "max_batch_size": 5,
+    "dedupe_window": 60,
+    "notify_connection_status": true,
+    "notify_new_users": true,
+    "show_player_join_leave": false
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "text",
+    "log_to_file": true,
+    "log_file_path": "./logs/app.log",
+    "max_file_size": 10485760,
+    "backup_count": 5
+  }
 }
 ```
 
