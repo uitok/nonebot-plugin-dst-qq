@@ -95,18 +95,14 @@ LOG_LEVEL=DEBUG
 
 配置示例：
 ```json
-{
-    "dmp_url": "http://your-dmp-server:port/v1",
-    "auth": {
-        "username": "your-username",
-        "password": "your-password"
-    },
-    "clusters": ["YourClusterName"],
-    "cache_settings": {
-        "enable_cache": true,
-        "cache_ttl": 300
-    }
-}
+  "dmp": {
+    "base_url": "http://your-dmp-server:8080/v1",
+    "token": "your-dmp-token-here",
+    "timeout": 10.0,
+    "max_retries": 3,
+    "retry_delay": 1.0,
+    "auto_discover_clusters": true,
+    "cluster_cache_ttl": 300
 ```
 
 ## 🎯 命令使用
