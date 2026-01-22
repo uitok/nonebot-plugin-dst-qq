@@ -134,18 +134,18 @@ class ClusterManager:
             logger.warning(f"尝试设置不存在的集群: {cluster_name}")
             return False
         
+        # 清理相关缓存，让新集群立即生效
+        await self._clear_cluster_related_cache()
+
         # 设置当前集群
         cluster_info = {
             "name": cluster_name,
             "set_by": user_id,
             "set_at": datetime.now().isoformat()
         }
-        
+
         await self.cache.set(self._current_cluster_key, cluster_info, 3600 * 24)  # 24小时缓存
-        
-        # 清理相关缓存，让新集群立即生效
-        await self._clear_cluster_related_cache()
-        
+
         logger.info(f"用户 {user_id} 设置当前集群为: {cluster_name}，已清理相关缓存")
         return True
     
@@ -167,7 +167,7 @@ class ClusterManager:
             else:
                 logger.warning(f"当前设置的集群 {cluster_name} 不再可用，将使用默认集群")
                 # 清除无效的设置
-                await self.cache_manager.delete("config", self._current_cluster_key)
+                await self.cache.delete(self._current_cluster_key)
         
         # 返回默认集群
         return await self.get_default_cluster()
@@ -175,24 +175,8 @@ class ClusterManager:
     async def _clear_cluster_related_cache(self) -> None:
         """清理集群相关的缓存，确保集群切换后立即生效"""
         try:
-            # 清理API相关的缓存
-            cache_keys_to_clear = [
-                "get_world_info",
-                "get_room_info", 
-                "get_players",
-                "get_connection_info",
-                "get_backup_list",
-                "get_chat_history"
-            ]
-            
-            for cache_key in cache_keys_to_clear:
-                try:
-                    # 清理API缓存（memory和file）
-                    await self.cache_manager.delete("api", cache_key)
-                except Exception as e:
-                    logger.debug(f"清理缓存 {cache_key} 时出错: {e}")
-            
-            logger.debug("已清理集群相关缓存")
+            await self.cache.clear()
+            logger.debug("已清理缓存（集群切换触发）")
             
         except Exception as e:
             logger.warning(f"清理集群相关缓存失败: {e}")
@@ -283,4 +267,3 @@ def init_cluster_manager(dmp_api: "DMPAPI", cache: SimpleCache) -> ClusterManage
 def get_cluster_manager() -> Optional[ClusterManager]:
     """获取全局集群管理器实例"""
     return _cluster_manager
-
